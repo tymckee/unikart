@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { hasDatabase, prisma } from "./db";
 import { parseProduct } from "./parser";
+import { runPriceStockCheck } from "./jobs/price-stock";
 import type { ParsePreview } from "./parse-preview";
 import type { Availability, MetadataConfidence } from "./types";
 
@@ -11,6 +12,28 @@ const USER_ID = "user_1";
 /** Read a product preview from a pasted URL (server-side fetch + parse). */
 export async function parseProductUrl(url: string): Promise<ParsePreview> {
   return parseProduct(url);
+}
+
+/** Manually run the price/stock check (the "Run check now" button). */
+export async function runPriceCheckNow(): Promise<
+  ActionResult<{ priceChanges: number; stockChanges: number; notifications: number }>
+> {
+  if (!hasDatabase()) return NO_DB;
+  try {
+    const s = await runPriceStockCheck();
+    revalidateAll();
+    return {
+      ok: true,
+      data: {
+        priceChanges: s.priceChanges,
+        stockChanges: s.stockChanges,
+        notifications: s.notifications,
+      },
+    };
+  } catch (e) {
+    console.error("[action] runPriceCheckNow:", e);
+    return { ok: false, reason: "error" };
+  }
 }
 
 export type ActionResult<T = undefined> =

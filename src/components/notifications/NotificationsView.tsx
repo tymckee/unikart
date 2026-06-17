@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCheck, RefreshCw } from "lucide-react";
 import type { Notification } from "@/lib/types";
-import { markAllNotificationsRead } from "@/lib/actions";
+import { markAllNotificationsRead, runPriceCheckNow } from "@/lib/actions";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { WheelSpinner } from "@/components/brand/WheelLoader";
 import { NotificationCard } from "./NotificationCard";
 
+// Used only as the no-database fallback (preview deploy with no DATABASE_URL).
 const SIMULATED: Array<Omit<Notification, "id" | "createdAt" | "read">> = [
   {
     userId: "user_1",
@@ -38,16 +39,31 @@ const SIMULATED: Array<Omit<Notification, "id" | "createdAt" | "read">> = [
 export function NotificationsView({ initial }: { initial: Notification[] }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [items, setItems] = useState(initial);
   const [tab, setTab] = useState<"all" | "unread">("all");
   const [checking, setChecking] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  // Client-only overlays on top of server `initial` (no clobbering on refresh):
+  const [simAdded, setSimAdded] = useState<Notification[]>([]);
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [simIdx, setSimIdx] = useState(0);
+
+  const items = useMemo(() => {
+    const base = [...simAdded, ...initial];
+    return readIds.size
+      ? base.map((n) => (readIds.has(n.id) ? { ...n, read: true } : n))
+      : base;
+  }, [simAdded, initial, readIds]);
 
   const unreadCount = items.filter((n) => !n.read).length;
   const shown = tab === "unread" ? items.filter((n) => !n.read) : items;
 
+  const flash = (msg: string) => {
+    setNote(msg);
+    setTimeout(() => setNote(null), 4000);
+  };
+
   const markAllRead = () => {
-    setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+    setReadIds(new Set(items.map((n) => n.id))); // optimistic, persists overlay
     startTransition(async () => {
       await markAllNotificationsRead();
       router.refresh();
@@ -56,20 +72,36 @@ export function NotificationsView({ initial }: { initial: Notification[] }) {
 
   const runCheck = () => {
     setChecking(true);
-    setTimeout(() => {
-      const tpl = SIMULATED[simIdx % SIMULATED.length];
-      setItems((prev) => [
-        {
-          ...tpl,
-          id: `n_sim_${Date.now()}`,
-          read: false,
-          createdAt: new Date().toISOString(),
-        },
-        ...prev,
-      ]);
-      setSimIdx((i) => i + 1);
+    startTransition(async () => {
+      const res = await runPriceCheckNow();
+      if (res.ok) {
+        const n = res.data?.notifications ?? 0;
+        const pc = res.data?.priceChanges ?? 0;
+        flash(
+          n
+            ? `${n} new update${n === 1 ? "" : "s"}`
+            : pc
+              ? `${pc} price change${pc === 1 ? "" : "s"} — no new alerts`
+              : "No changes this time",
+        );
+        router.refresh();
+      } else {
+        // No database (preview deploy): simulate so the demo still moves.
+        const tpl = SIMULATED[simIdx % SIMULATED.length];
+        setSimAdded((prev) => [
+          {
+            ...tpl,
+            id: `n_sim_${simIdx}_${prev.length}`,
+            read: false,
+            createdAt: new Date().toISOString(),
+          },
+          ...prev,
+        ]);
+        setSimIdx((i) => i + 1);
+        flash("Simulated an update (no database connected)");
+      }
       setChecking(false);
-    }, 1200);
+    });
   };
 
   return (
@@ -117,8 +149,8 @@ export function NotificationsView({ initial }: { initial: Notification[] }) {
       )}
 
       <p className="pt-2 text-center text-xs text-silver">
-        In this preview, “Run check now” simulates the background price &amp;
-        stock job that will run automatically on a schedule.
+        {note ??
+          "Run check now scans every tracked product for price & stock changes — the same job a schedule runs automatically."}
       </p>
     </div>
   );
