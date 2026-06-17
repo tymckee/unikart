@@ -62,7 +62,7 @@ Use these exact terms in the UI. (Internal code names may differ; user-facing co
 | Guided buying help | **Checkout Assistant** (guided) | "auto-buy", "1-click buy" |
 | Your saved-items home | **Hub** | "dashboard" (in copy) |
 | How long something's waited | **"Considering for X"** | "waiting", "abandoned" |
-| Paid tier | **UniKart Pro** | "Premium", "Plus" |
+| Paid tier | **UniKart Coast** | "Pro", "Premium", "Plus" |
 
 **Signal — NON-NEGOTIABLE:** it is guidance, **always gated by confidence**, and framed as **"Based on tracked price history"** — *never* financial advice, never a guarantee, never "you should buy this."
 
@@ -70,7 +70,7 @@ Use these exact terms in the UI. (Internal code names may differ; user-facing co
 
 ## 5. Commerce principles — NON-NEGOTIABLE
 
-- **Guided checkout, payment stays on the merchant.** UniKart never takes payment for a *purchase*. We guide you to buy on the store's own site. (The only thing UniKart charges for is the **UniKart Pro** subscription, via Stripe.)
+- **Guided checkout, payment stays on the merchant.** UniKart never takes payment for a *purchase*. We guide you to buy on the store's own site. (The only thing UniKart charges for is the **UniKart Coast** subscription, via Stripe.)
 - **One source of truth for all totals.** Prices, cart totals, and savings must be computed once and shown consistently — never conflicting numbers across views.
 - **Honest data, always.** Never fabricate a price, spec, or stock status. When we don't know, say so (confidence levels). A blank price beats a made-up one.
 - **We never ask for store logins.** No scraping wishlists via the user's retailer credentials.
@@ -113,8 +113,8 @@ Use these exact terms in the UI. (Internal code names may differ; user-facing co
 1. **Spelling:** "UniKart" everywhere (domain `uni-kart.com` the only exception).
 2. **Voice:** calm; no urgency, no exclamation marks, no hype, no dark patterns.
 3. **Signal:** any buy guidance is called "Signal," confidence-gated, and framed as "based on tracked price history" — not financial advice.
-4. **Lexicon:** Collections (not Spokes), Release, the gist, Universal Cart, Hub, UniKart Pro used correctly.
-5. **Checkout:** purchase payment stays on the merchant's site; only UniKart Pro is billed by us.
+4. **Lexicon:** Collections (not Spokes), Release, the gist, Universal Cart, Hub, UniKart Coast used correctly.
+5. **Checkout:** purchase payment stays on the merchant's site; only UniKart Coast is billed by us.
 6. **Totals:** one source of truth; no conflicting numbers.
 7. **Honesty:** no fabricated prices/specs/stock; uncertainty shown, not hidden.
 8. **Privacy:** privacy/export/delete controls remain free and accessible.

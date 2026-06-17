@@ -9,16 +9,13 @@ import {
   Scissors,
   Sparkles,
 } from "lucide-react";
-import { authClient, useSession } from "@/lib/auth-client";
-import { friendlyAuthError } from "@/lib/auth-errors";
+import { authClient } from "@/lib/auth-client";
+import { friendlyBillingError } from "@/lib/auth-errors";
+import type { BillingInfo } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { SettingsSection } from "./SettingsSection";
-
-interface PlanUser {
-  plan: "free" | "pro";
-}
 
 const PRO_BENEFITS: { icon: React.ReactNode; label: string; detail: string }[] =
   [
@@ -45,24 +42,26 @@ const PRO_BENEFITS: { icon: React.ReactNode; label: string; detail: string }[] =
   ];
 
 /**
- * Plan & billing. Free users see a calm upgrade card (monthly/annual toggle +
- * a 7-day free-trial button that opens Stripe Checkout via the Better Auth
- * Stripe plugin). Pro users see their status and a "Manage billing" button
- * that opens the Stripe billing portal.
+ * Plan & billing. State is resolved server-side from the Subscription row in
+ * Neon and passed in as `billing` (the source of truth) — the client session
+ * doesn't reliably carry the custom `plan` field, so we never infer plan here.
+ *
+ * - An active/trialing/past_due subscription renders the Pro state with a
+ *   "Manage billing" button and NO upgrade button, so a stale re-click can't
+ *   trigger the "already subscribed" Stripe error.
+ * - Otherwise we render the calm upgrade card (monthly/annual toggle + a 7-day
+ *   free-trial button that opens Stripe Checkout via the Better Auth plugin).
  */
-export function PlanBillingCard({ initialUser }: { initialUser: PlanUser }) {
-  const { data: session } = useSession();
-  const plan = ((session?.user as { plan?: string } | undefined)?.plan ??
-    initialUser.plan) as "free" | "pro";
-
-  if (plan === "pro") {
-    return <ProBilling />;
+export function PlanBillingCard({ billing }: { billing: BillingInfo }) {
+  if (billing.active) {
+    return <ProBilling billing={billing} />;
   }
   return <UpgradeCard />;
 }
 
 function UpgradeCard() {
-  const [cycle, setCycle] = useState<"monthly" | "annual">("monthly");
+  // Default to Annual — the calm "best value" option (no urgency, no pressure).
+  const [cycle, setCycle] = useState<"monthly" | "annual">("annual");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,9 +78,7 @@ function UpgradeCard() {
     });
     if (error) {
       setLoading(false);
-      setError(
-        friendlyAuthError(error, "We couldn’t start your trial. Please try again."),
-      );
+      setError(friendlyBillingError(error));
       return;
     }
     // On success the plugin redirects to Stripe Checkout — keep the spinner up.
@@ -90,7 +87,7 @@ function UpgradeCard() {
   return (
     <SettingsSection
       title="Plan & billing"
-      description="Free covers the essentials. Pro unlocks the full, automatic UniKart."
+      description="Free covers the essentials. Coast lets the wheel keep turning on its own."
     >
       <div className="p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -99,7 +96,7 @@ function UpgradeCard() {
               <Sparkles size={18} />
             </span>
             <div>
-              <h3 className="text-sm font-semibold text-ink">UniKart Pro</h3>
+              <h3 className="text-sm font-semibold text-ink">UniKart Coast</h3>
               <p className="text-xs text-slate">
                 Everything you save, watched for you.
               </p>
@@ -118,16 +115,21 @@ function UpgradeCard() {
 
         {/* Price */}
         <div className="mt-5 flex items-baseline gap-2">
-          <span className="text-3xl font-semibold tracking-tight text-ink">
+          <span className="text-3xl font-semibold tracking-tight text-ink tabular-nums">
             {annual ? "$49" : "$5"}
           </span>
           <span className="text-sm text-slate">{annual ? "/year" : "/month"}</span>
           {annual && (
             <Pill tone="accent" className="ml-1">
-              2 months free
+              Best value
             </Pill>
           )}
         </div>
+        {annual && (
+          <p className="mt-1.5 text-xs text-slate">
+            2 months free · about $4 a month
+          </p>
+        )}
 
         {/* Benefits */}
         <ul className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -148,7 +150,7 @@ function UpgradeCard() {
           ))}
         </ul>
 
-        {error && <p className="mt-4 text-xs text-up">{error}</p>}
+        {error && <p className="mt-4 text-xs text-slate">{error}</p>}
 
         {/* CTA */}
         <div className="mt-6 flex flex-col gap-2">
@@ -165,7 +167,7 @@ function UpgradeCard() {
   );
 }
 
-function ProBilling() {
+function ProBilling({ billing }: { billing: BillingInfo }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -178,12 +180,18 @@ function ProBilling() {
     if (error) {
       setLoading(false);
       setError(
-        friendlyAuthError(error, "We couldn’t open the billing portal. Please try again."),
+        friendlyBillingError(
+          error,
+          "We couldn’t open the billing portal — please try again.",
+        ),
       );
       return;
     }
     // On success the plugin redirects to Stripe's portal — keep the spinner up.
   }
+
+  const headline = proHeadline(billing);
+  const status = proStatusLine(billing);
 
   return (
     <SettingsSection
@@ -197,14 +205,12 @@ function ProBilling() {
           </span>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-ink">UniKart Pro</h3>
-              <Pill tone="ink" dot>
-                Active
+              <h3 className="text-sm font-semibold text-ink">{headline.title}</h3>
+              <Pill tone={headline.tone} dot>
+                {headline.label}
               </Pill>
             </div>
-            <p className="mt-0.5 text-xs text-slate">
-              Unlimited items, instant re-checks, AI gist, and cutouts.
-            </p>
+            <p className="mt-0.5 text-xs text-slate">{status}</p>
           </div>
         </div>
         <Button variant="secondary" onClick={manageBilling} loading={loading}>
@@ -213,7 +219,9 @@ function ProBilling() {
       </div>
 
       {error && (
-        <p className="border-t border-line px-5 py-2 text-xs text-up">{error}</p>
+        <p className="border-t border-line px-5 py-2 text-xs text-slate">
+          {error}
+        </p>
       )}
 
       <ul className="border-t border-line px-5 py-4">
@@ -229,4 +237,48 @@ function ProBilling() {
       </ul>
     </SettingsSection>
   );
+}
+
+/** The Pro card's title + status Pill, derived from the billing state. */
+function proHeadline(billing: BillingInfo): {
+  title: string;
+  label: string;
+  tone: "ink" | "accent" | "neutral";
+} {
+  if (billing.cancelAtPeriodEnd) {
+    return { title: "UniKart Coast", label: "Ending", tone: "neutral" };
+  }
+  if (billing.status === "trialing") {
+    return { title: "UniKart Coast", label: "Free trial", tone: "accent" };
+  }
+  return { title: "UniKart Coast — Active", label: "Active", tone: "ink" };
+}
+
+/** A single calm line under the headline, accurate to the subscription state. */
+function proStatusLine(billing: BillingInfo): string {
+  if (billing.cancelAtPeriodEnd && billing.periodEnd) {
+    return `Your plan ends ${formatBillingDate(billing.periodEnd)}. You'll keep Coast until then.`;
+  }
+  if (billing.status === "trialing" && billing.trialEnd) {
+    return `Free trial — renews ${formatBillingDate(billing.trialEnd)}.`;
+  }
+  if (billing.status === "past_due") {
+    return "There's a payment to sort out — manage billing to keep Coast.";
+  }
+  if (billing.periodEnd) {
+    return `Renews ${formatBillingDate(billing.periodEnd)}.`;
+  }
+  return "Unlimited items, instant re-checks, AI gist, and cutouts.";
+}
+
+function formatBillingDate(value: string): string {
+  try {
+    return new Date(value).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return "soon";
+  }
 }

@@ -167,7 +167,7 @@ export async function saveProduct(
         return {
           ok: false,
           reason: "error",
-          message: `Free plan is limited to ${FREE_ACTIVE_PRODUCT_LIMIT} saved items — upgrade to Pro for unlimited.`,
+          message: `Free plan is limited to ${FREE_ACTIVE_PRODUCT_LIMIT} saved items — upgrade to Coast for unlimited.`,
         };
       }
     }

@@ -33,3 +33,50 @@ export function friendlyAuthError(
   if (msg) return msg;
   return fallback;
 }
+
+/**
+ * Billing-specific variant. Maps Stripe / Better-Auth subscription errors to
+ * calm, on-brand copy and — crucially — never surfaces a raw Stripe string
+ * (e.g. "Cannot update the subscription sub_… because there are no changes to
+ * confirm"). The "already on Pro" cases all resolve to the same gentle line so
+ * a stale upgrade click reads as reassurance, not an error.
+ */
+export function friendlyBillingError(
+  error:
+    | { code?: string; message?: string; status?: number; statusText?: string }
+    | null
+    | undefined,
+  fallback = "Something went wrong starting your trial — please try again.",
+): string {
+  if (!error) return fallback;
+
+  const alreadyPro =
+    "You’re already on UniKart Coast — manage your plan below.";
+
+  const code = ((error as { code?: string }).code ?? "").toUpperCase();
+  const byCode: Record<string, string> = {
+    ALREADY_SUBSCRIBED_PLAN: alreadyPro,
+    SUBSCRIPTION_NOT_FOUND:
+      "We couldn’t find that subscription. Please refresh and try again.",
+    SESSION_EXPIRED:
+      "For your security, please sign in again to manage your plan.",
+  };
+  if (code && byCode[code]) return byCode[code];
+
+  // Some "already subscribed" states arrive as a raw Stripe message rather than
+  // a typed code — most notably the "no changes to confirm" error you hit when
+  // re-clicking upgrade with an active subscription. Catch these by shape and
+  // map them to the same calm line instead of leaking Stripe's wording.
+  const raw = (error.message ?? "").toLowerCase();
+  if (
+    raw.includes("no changes to confirm") ||
+    raw.includes("already subscribed") ||
+    raw.includes("already have")
+  ) {
+    return alreadyPro;
+  }
+
+  // Anything else: never echo a raw Stripe/Better-Auth string — fall back to a
+  // gentle generic line.
+  return fallback;
+}

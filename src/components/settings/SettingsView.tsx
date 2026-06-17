@@ -8,6 +8,8 @@ import {
   getProductViews,
   mockNotifications,
 } from "@/lib/mock-data";
+import { authClient } from "@/lib/auth-client";
+import type { BillingInfo } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/Switch";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -15,6 +17,7 @@ import { useSignOut } from "@/components/auth/use-sign-out";
 import { SettingsSection, SettingsRow } from "./SettingsSection";
 import { AccountCard } from "./AccountCard";
 import { PlanBillingCard } from "./PlanBillingCard";
+import { ProWelcome } from "./ProWelcome";
 import { PasskeysManager } from "./PasskeysManager";
 import { ChangePasswordCard } from "./ChangePasswordCard";
 import { SessionsManager } from "./SessionsManager";
@@ -30,8 +33,10 @@ interface InitialUser {
 
 export function SettingsView({
   initialUser,
+  billing,
 }: {
   initialUser: InitialUser | null;
+  billing: BillingInfo;
 }) {
   const { signOut, pending: signingOut } = useSignOut();
   const searchParams = useSearchParams();
@@ -40,22 +45,23 @@ export function SettingsView({
   const [quietHours, setQuietHours] = useState(true);
   const [affiliate, setAffiliate] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [welcome, setWelcome] = useState(false);
 
   const flash = (msg: string) => {
     setNote(msg);
     setTimeout(() => setNote(null), 3500);
   };
 
-  // Returning from Stripe Checkout (?upgraded=1) → confirm warmly. The webhook
-  // flips User.plan to "pro"; useSession picks it up on the next refresh.
-  // Deferred to a timeout so we don't setState synchronously in the effect.
+  // Returning from Stripe Checkout (?upgraded=1) → show a calm, intentional
+  // welcome moment (rendered below), then clean the URL param. The server prop
+  // is the source of truth for plan state; we also nudge the client cache to
+  // refresh so any session-derived UI catches up. Deferred to a timeout so we
+  // don't setState synchronously in the effect.
   useEffect(() => {
     if (searchParams.get("upgraded") !== "1") return;
     window.history.replaceState(null, "", "/settings");
-    const t = setTimeout(
-      () => flash("Welcome to UniKart Pro — your trial is active."),
-      0,
-    );
+    void authClient.subscription.list().catch(() => {});
+    const t = setTimeout(() => setWelcome(true), 0);
     return () => clearTimeout(t);
   }, [searchParams]);
 
@@ -81,6 +87,9 @@ export function SettingsView({
 
   return (
     <div className="space-y-8">
+      {/* A quiet welcome after returning from Checkout (?upgraded=1). */}
+      {welcome && <ProWelcome onDismiss={() => setWelcome(false)} />}
+
       {/* Account */}
       {initialUser && <AccountCard initialUser={initialUser} onNotify={flash} />}
 
@@ -113,9 +122,7 @@ export function SettingsView({
       </div>
 
       {/* Plan & billing */}
-      {initialUser && (
-        <PlanBillingCard initialUser={{ plan: initialUser.plan }} />
-      )}
+      {initialUser && <PlanBillingCard billing={billing} />}
 
       {/* Alerts / Notifications */}
       <SettingsSection title="Notifications">

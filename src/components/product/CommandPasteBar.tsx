@@ -328,7 +328,7 @@ export function CommandPasteBar({
                     href="/settings"
                     className="inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline"
                   >
-                    <Sparkles size={13} /> Upgrade to Pro
+                    <Sparkles size={13} /> Upgrade to Coast
                   </Link>
                 </div>
               ) : (

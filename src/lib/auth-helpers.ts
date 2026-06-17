@@ -3,7 +3,12 @@
 // helpers in ./utils (e.g. looksLikeEmail) instead.
 import { headers } from "next/headers";
 import { auth } from "./auth";
-import type { User } from "./types";
+import { prisma } from "./db";
+import type { BillingInfo, User } from "./types";
+
+// Statuses Stripe reports that we treat as a live, Pro-granting subscription.
+// Mirrors PRO_STATUSES in auth.ts (we keep Pro through the dunning grace window).
+const ACTIVE_BILLING_STATUSES = new Set(["active", "trialing", "past_due"]);
 
 /**
  * The authenticated user for the current request, or `null` when there's no
@@ -46,6 +51,75 @@ export async function getCurrentUserId(): Promise<string | null> {
 }
 
 /**
+ * Server-side billing state for the given user, read straight from the
+ * Subscription row in Neon — the source of truth. The client session does not
+ * reliably carry the custom `plan` field, so the Plan & billing card resolves
+ * its state from this instead (no more "already subscribed" re-clicks).
+ *
+ * We pick the most relevant subscription: an active/trialing/past_due one if
+ * present, otherwise the most recently created row. Returns a calm default
+ * (`active: false`, `status: "none"`) when there's no subscription or no DB.
+ */
+export async function getBillingInfo(userId: string): Promise<BillingInfo> {
+  const empty: BillingInfo = {
+    active: false,
+    status: "none",
+    billingInterval: null,
+    periodEnd: null,
+    trialEnd: null,
+    cancelAtPeriodEnd: false,
+  };
+
+  try {
+    const subscriptions = await prisma.subscription.findMany({
+      where: { referenceId: userId },
+      orderBy: { periodEnd: "desc" },
+    });
+    if (subscriptions.length === 0) return empty;
+
+    // Prefer a live (Pro-granting) subscription; otherwise the latest row so we
+    // can still surface a "canceled" state accurately.
+    const sub =
+      subscriptions.find((s) => ACTIVE_BILLING_STATUSES.has(s.status)) ??
+      subscriptions[0];
+
+    const active = ACTIVE_BILLING_STATUSES.has(sub.status);
+    const status = normalizeBillingStatus(sub.status);
+    const billingInterval =
+      sub.billingInterval === "year"
+        ? "year"
+        : sub.billingInterval === "month"
+          ? "month"
+          : null;
+
+    return {
+      active,
+      status,
+      billingInterval,
+      periodEnd: sub.periodEnd ? sub.periodEnd.toISOString() : null,
+      trialEnd: sub.trialEnd ? sub.trialEnd.toISOString() : null,
+      cancelAtPeriodEnd: Boolean(sub.cancelAtPeriodEnd),
+    };
+  } catch (e) {
+    console.error("[auth] getBillingInfo:", e);
+    return empty;
+  }
+}
+
+function normalizeBillingStatus(value: string): BillingInfo["status"] {
+  switch (value) {
+    case "active":
+    case "trialing":
+    case "past_due":
+    case "canceled":
+    case "incomplete":
+      return value;
+    default:
+      return "none";
+  }
+}
+
+/**
  * Pro-gate guard. Resolves to the signed-in Pro user's id, or returns a typed
  * error result (never throws) so server actions can `if (!("id" in gate))`
  * short-circuit cleanly. Mirrors Stripe via the User.plan column (see auth.ts).
@@ -64,7 +138,7 @@ export async function requirePro(): Promise<
     return {
       ok: false,
       reason: "upgrade-required",
-      message: "This feature is part of UniKart Pro.",
+      message: "This feature is part of UniKart Coast.",
     };
   }
   return { id: user.id };

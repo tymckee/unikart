@@ -57,6 +57,31 @@ export interface User {
   updatedAt: string;
 }
 
+/**
+ * Server-resolved billing state for the Plan & billing card. Sourced from the
+ * Subscription row in Neon (the source of truth) rather than the client session,
+ * which doesn't reliably carry the custom `plan` field. `active` is true while
+ * the subscription is in any Pro-granting status (active / trialing / past_due).
+ */
+export interface BillingInfo {
+  /** True when the user holds a Pro-granting subscription (active/trialing/past_due). */
+  active: boolean;
+  status:
+    | "active"
+    | "trialing"
+    | "past_due"
+    | "canceled"
+    | "incomplete"
+    | "none";
+  billingInterval: "month" | "year" | null;
+  /** ISO date the current period ends / renews. */
+  periodEnd: string | null;
+  /** ISO date the free trial ends, when trialing. */
+  trialEnd: string | null;
+  /** True when the subscription is set to end at the period boundary. */
+  cancelAtPeriodEnd: boolean;
+}
+
 export interface Collection {
   id: string;
   userId: string;
