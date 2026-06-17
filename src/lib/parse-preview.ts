@@ -1,5 +1,5 @@
 import type { Availability, MetadataConfidence } from "./types";
-import { hashUnit, prettyDomain, storeNameFromDomain } from "./utils";
+import { prettyDomain, storeNameFromDomain } from "./utils";
 
 export interface ParsePreview {
   title: string;
@@ -40,10 +40,20 @@ export function categoryFromText(text: string): string {
   return "Home";
 }
 
+/** Count the word-like tokens in a URL slug segment (3+ letters each). */
+function slugWordCount(s: string): number {
+  return s
+    .replace(/\.(html?|php|aspx?)$/i, "")
+    .split(/[-_]+/)
+    .filter((w) => /[a-z]{3,}/i.test(w)).length;
+}
+
 /**
- * Mock adapter — derives a plausible, deterministic preview from the URL alone.
- * Used as a graceful fallback when the live page can't be read (blocked,
- * offline, JS-only, etc.). The real reader is src/lib/parser.
+ * URL-only fallback used when the live page can't be read (blocked, offline,
+ * JS-only). Derives an HONEST preview from the URL: a human-readable name from
+ * the most descriptive path segment, the store from the domain, a best-effort
+ * category — and crucially NO fabricated price or stock. Price stays null and
+ * availability "unknown" so we never present invented numbers as if real.
  */
 export function simulateParse(rawUrl: string): ParsePreview {
   const url = rawUrl.trim();
@@ -51,40 +61,37 @@ export function simulateParse(rawUrl: string): ParsePreview {
   const domain = prettyDomain(withProto);
   const storeName = storeNameFromDomain(domain);
 
-  let slug = "";
+  let segments: string[] = [];
   try {
-    const u = new URL(withProto);
-    const parts = u.pathname.split("/").filter(Boolean);
-    slug = parts[parts.length - 1] ?? "";
+    segments = new URL(withProto).pathname.split("/").filter(Boolean);
   } catch {
     /* ignore */
   }
-  const cleaned = slug
+  // Pick the most descriptive segment — retail URLs often put the readable slug
+  // before a trailing SKU/code (e.g. /product/ray-ban-meta-wayfarer-.../BCKVZQZ5S6).
+  const best =
+    segments.slice().sort((a, b) => slugWordCount(b) - slugWordCount(a))[0] ?? "";
+  const cleaned = best
     .replace(/\.(html?|php|aspx?)$/i, "")
     .replace(/[-_]+/g, " ")
     .replace(/\b\w/g, (m) => m.toUpperCase())
     .trim();
-
-  const seed = domain + slug;
-  const h = hashUnit(seed);
-  const price = Math.round((19 + h * 680) * 100) / 100;
-  const category = categoryFromText(seed);
-
-  const availability: Availability =
-    h > 0.85 ? "out_of_stock" : h > 0.7 ? "low_stock" : "in_stock";
+  // Only treat it as a real name if it reads like words, not a bare SKU/code.
+  const title = slugWordCount(best) >= 2 ? cleaned : `${storeName} item`;
+  const category = categoryFromText(`${title} ${domain}`);
 
   return {
-    title: cleaned || `${storeName} product`,
-    description: `Saved from ${domain}. Confirm the details below.`,
+    title: title.slice(0, 200),
+    description: `Saved from ${domain}. Add the details below.`,
     imageUrl: null,
     storeName,
     storeDomain: domain,
     category,
     brand: null,
     sku: null,
-    price,
+    price: null, // never fabricate a price
     currency: "USD",
-    availability,
+    availability: "unknown" as Availability,
     confidence: "low",
     originalUrl: withProto,
     canonicalUrl: withProto,
