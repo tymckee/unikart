@@ -65,11 +65,17 @@ async function imglyCutout(sourceUrl: string): Promise<string | null> {
     /* not cached yet */
   }
 
+  // Optional, dev-only dependency — omitted from the production install
+  // (NPM_FLAGS=--omit=optional). Resolve it through a non-literal specifier so
+  // the build's type-checker doesn't require the module to be installed; the
+  // runtime try/catch handles its absence.
   let removeBackground: (input: Blob) => Promise<Blob>;
   try {
-    ({ removeBackground } = (await import(
-      "@imgly/background-removal-node"
-    )) as unknown as { removeBackground: (input: Blob) => Promise<Blob> });
+    const pkg = "@imgly/background-removal-node";
+    const mod = (await import(pkg)) as unknown as {
+      removeBackground: (input: Blob) => Promise<Blob>;
+    };
+    removeBackground = mod.removeBackground;
   } catch {
     console.warn("[cutout] @imgly/background-removal-node not installed");
     return null;
