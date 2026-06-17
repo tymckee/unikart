@@ -3,6 +3,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { HubProvider } from "@/components/hub/HubProvider";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { getCollectionsWithCounts, getUnreadCount } from "@/lib/data";
+import { hasDatabase, prisma } from "@/lib/db";
 
 /**
  * Server-side gate for the authenticated app (dashboard, collections, cart,
@@ -21,6 +22,24 @@ export default async function AppGroupLayout({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
+
+  // An admin-disabled account can't use the app. Best-effort (defaults to
+  // allow if the lookup fails) so a transient DB hiccup never locks everyone
+  // out. NOTE: redirect() must run OUTSIDE the try (it throws a control-flow
+  // signal that the catch would otherwise swallow).
+  let disabled = false;
+  if (hasDatabase()) {
+    try {
+      const row = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { status: true },
+      });
+      disabled = row?.status === "disabled";
+    } catch {
+      // ignore — fall through and allow
+    }
+  }
+  if (disabled) redirect("/sign-in?disabled=1");
 
   const [unread, collections] = await Promise.all([
     getUnreadCount(),
