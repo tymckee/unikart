@@ -97,6 +97,7 @@ interface Seed {
   notes?: string;
   archived?: boolean;
   purchased?: boolean;
+  released?: boolean;
   url: string;
   description: string;
 }
@@ -339,6 +340,7 @@ export const mockProducts: Product[] = seeds.map((s) => ({
   isArchived: s.archived ?? false,
   isPurchased: s.purchased ?? false,
   purchasedAt: s.purchased ? daysAgo(14) : null,
+  releasedAt: s.released ? daysAgo(7) : null,
   createdAt: daysAgo(45 - seeds.indexOf(s) * 3),
   updatedAt: hoursAgo(seeds.indexOf(s) * 5 + 2),
   lastCheckedAt: hoursAgo(seeds.indexOf(s) + 1),

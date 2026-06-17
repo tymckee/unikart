@@ -2,21 +2,27 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Archive,
   Check,
   CheckCircle2,
   ExternalLink,
   ShoppingBag,
+  Sprout,
+  Undo2,
+  Wind,
 } from "lucide-react";
-import { formatPrice, toPositiveNumber } from "@/lib/utils";
+import { durationSince, formatPrice, toPositiveNumber } from "@/lib/utils";
 import type { ProductView } from "@/lib/types";
 import {
   addToCart,
   archiveProduct,
   markPurchased,
+  releaseProduct,
   removeProductFromCart,
   setAlert,
+  unreleaseProduct,
   updateNotes,
 } from "@/lib/actions";
 import { Button } from "@/components/ui/Button";
@@ -39,6 +45,7 @@ export function ProductDetailActions({ product }: { product: ProductView }) {
   const [notes, setNotes] = useState(product.notes ?? "");
   const [purchased, setPurchased] = useState(product.isPurchased);
   const [notesSaved, setNotesSaved] = useState(false);
+  const [released, setReleased] = useState(Boolean(product.releasedAt));
 
   const run = (fn: () => Promise<unknown>) =>
     startTransition(async () => {
@@ -112,6 +119,21 @@ export function ProductDetailActions({ product }: { product: ProductView }) {
           </Button>
         </div>
       </GlassCard>
+
+      {/* Release — a calm, guilt-free "let it go" */}
+      <ReleaseCard
+        product={product}
+        released={released}
+        onRelease={() => {
+          setReleased(true);
+          setInCart(false);
+          run(() => releaseProduct(product.id));
+        }}
+        onUnrelease={() => {
+          setReleased(false);
+          run(() => unreleaseProduct(product.id));
+        }}
+      />
 
       {/* Target alert */}
       <GlassCard variant="solid" className="p-5">
@@ -198,5 +220,101 @@ export function ProductDetailActions({ product }: { product: ProductView }) {
         />
       </GlassCard>
     </div>
+  );
+}
+
+/**
+ * The Release control. Releasing is a positive, conscious act — letting go of
+ * the urge to buy something you've been considering, with no guilt. It's
+ * distinct from Archive (filing away) and Delete (erasing): we keep the item
+ * and honor how long you thought about it. The released state is intentionally
+ * serene rather than transactional.
+ */
+function ReleaseCard({
+  product,
+  released,
+  onRelease,
+  onUnrelease,
+}: {
+  product: ProductView;
+  released: boolean;
+  onRelease: () => void;
+  onUnrelease: () => void;
+}) {
+  // How long it was considered: createdAt → releasedAt. Derived purely from the
+  // persisted timestamp. In the brief optimistic window right after release
+  // (before the server stamps releasedAt and router.refresh lands) we simply
+  // omit the duration rather than read an impure clock during render.
+  const consideredFor = product.releasedAt
+    ? durationSince(product.createdAt, product.releasedAt)
+    : null;
+
+  return (
+    <GlassCard variant="solid" className="overflow-hidden p-5">
+      <AnimatePresence mode="wait" initial={false}>
+        {released ? (
+          <motion.div
+            key="released"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            className="space-y-3 text-center"
+          >
+            <span className="mx-auto inline-flex h-11 w-11 items-center justify-center rounded-full bg-canvas text-slate">
+              <Wind size={20} />
+            </span>
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold text-ink">Released</h3>
+              <p className="text-xs leading-relaxed text-slate">
+                {consideredFor
+                  ? `You let this go after considering it for ${consideredFor}.`
+                  : "You let this go."}{" "}
+                No guilt — that&apos;s money and attention back in your pocket.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onUnrelease}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-slate transition-colors hover:text-ink"
+            >
+              <Undo2 size={13} />
+              Bring it back
+            </button>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="release"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="space-y-3"
+          >
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-canvas text-slate">
+                <Sprout size={17} />
+              </span>
+              <div>
+                <h3 className="text-sm font-semibold text-ink">Let it go</h3>
+                <p className="mt-0.5 text-xs leading-relaxed text-slate">
+                  Decided you don&apos;t need this after all? Release it — a calm
+                  way to step back from the urge to buy, with nothing lost.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full"
+              onClick={onRelease}
+            >
+              <Wind size={15} />
+              Release
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </GlassCard>
   );
 }

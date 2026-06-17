@@ -4,7 +4,7 @@ export interface BuyBrainResult {
   verdict: BuyVerdict;
   headline: string;
   reason: string;
-  /** 0–1 model confidence in the recommendation. */
+  /** 0–1 model confidence in the signal. */
   confidence: number;
 }
 
@@ -27,7 +27,7 @@ function volatility(history: PriceSnapshot[]): number {
 }
 
 /**
- * Deterministic Buy / Wait / Watch recommendation.
+ * Deterministic Buy / Wait / Watch Signal.
  * MVP logic — structured so an AI model can replace it later
  * behind the same interface.
  */
@@ -114,7 +114,7 @@ export function buyBrain(
   return {
     verdict: "watch",
     headline: "Watch",
-    reason: "Holding steady. No clear signal to rush.",
+    reason: "Price is holding steady. No reason to rush.",
     confidence: 0.6,
   };
 }

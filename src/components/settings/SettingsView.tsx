@@ -81,7 +81,7 @@ export function SettingsView() {
       {/* Plan */}
       <SettingsSection
         title="Plan"
-        description="Free covers the essentials. Pro unlocks automatic tracking and Buy Brain."
+        description="Free covers the essentials. Pro unlocks automatic tracking and Signal."
       >
         <div className="grid gap-px bg-line sm:grid-cols-2">
           <PlanCard
@@ -101,7 +101,7 @@ export function SettingsView() {
               "Automatic price & stock tracking",
               "Unlimited alerts",
               "Advanced price history",
-              "Buy Brain recommendations",
+              "Signal buy/wait guidance",
             ]}
           />
         </div>

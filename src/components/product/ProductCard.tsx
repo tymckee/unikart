@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
@@ -8,18 +8,21 @@ import {
   Archive,
   Bell,
   Check,
+  Clock,
   ExternalLink,
   Eye,
   ShoppingCart,
   Target,
   TrendingDown,
   TrendingUp,
+  Wind,
 } from "lucide-react";
-import { cn, formatPrice, priceDelta } from "@/lib/utils";
+import { cn, durationSince, formatPrice, priceDelta } from "@/lib/utils";
 import type { ProductView } from "@/lib/types";
 import {
   addToCart,
   archiveProduct,
+  releaseProduct,
   removeProductFromCart,
   setAlert,
 } from "@/lib/actions";
@@ -33,10 +36,20 @@ export function ProductCard({ product }: { product: ProductView }) {
   const [, startTransition] = useTransition();
   const [watching, setWatching] = useState(Boolean(product.alert?.enabled));
   const [inCart, setInCart] = useState(product.inCart);
-  const [archived, setArchived] = useState(false);
+  // Set when the card leaves the active Hub (archived or released) — animates out.
+  const [removed, setRemoved] = useState(false);
 
   const delta = priceDelta(product.currentPrice, product.previousPrice);
   const hasTarget = product.alert?.type === "target_price" && product.alert.targetPrice;
+
+  // How long this has been waiting since you saved it. Computed in a mount
+  // effect (not during render) so the relative time can't cause an SSR/CSR
+  // hydration mismatch and render stays pure.
+  const [considering, setConsidering] = useState<string | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setConsidering(durationSince(product.createdAt));
+  }, [product.createdAt]);
 
   const run = (fn: () => Promise<unknown>) =>
     startTransition(async () => {
@@ -52,7 +65,7 @@ export function ProductCard({ product }: { product: ProductView }) {
 
   return (
     <AnimatePresence>
-      {!archived && (
+      {!removed && (
         <motion.div
           layout
           initial={{ opacity: 0, y: 8 }}
@@ -125,9 +138,18 @@ export function ProductCard({ product }: { product: ProductView }) {
                     <ExternalLink size={16} />
                   </QuickAction>
                   <QuickAction
+                    label="Release"
+                    onClick={stop(() => {
+                      setRemoved(true);
+                      run(() => releaseProduct(product.id));
+                    })}
+                  >
+                    <Wind size={16} />
+                  </QuickAction>
+                  <QuickAction
                     label="Archive"
                     onClick={stop(() => {
-                      setArchived(true);
+                      setRemoved(true);
                       run(() => archiveProduct(product.id));
                     })}
                   >
@@ -189,6 +211,14 @@ export function ProductCard({ product }: { product: ProductView }) {
                     </Pill>
                   )}
                 </div>
+
+                {/* How long it's been waiting — quiet, intentional */}
+                {considering && (
+                  <p className="flex items-center gap-1 pt-0.5 text-xs text-silver">
+                    <Clock size={11} className="shrink-0" />
+                    <span>Considering for {considering}</span>
+                  </p>
+                )}
               </div>
             </Link>
           </GlassCard>

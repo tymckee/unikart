@@ -386,6 +386,47 @@ export async function archiveProduct(productId: string): Promise<ActionResult> {
   }
 }
 
+/**
+ * Release a product: consciously let go of the urge to buy. This is a calm,
+ * guilt-free act — distinct from Archive (filing away) and Delete (erasing).
+ * We stamp releasedAt and quietly remove it from the active cart so it leaves
+ * the active Hub without lingering as an intent-to-buy.
+ */
+export async function releaseProduct(productId: string): Promise<ActionResult> {
+  if (!hasDatabase()) return NO_DB;
+  try {
+    await prisma.product.update({
+      where: { id: productId },
+      data: { releasedAt: new Date() },
+    });
+    // No longer something you're planning to buy — clear it from the cart.
+    await prisma.universalCartItem.deleteMany({ where: { productId } });
+    revalidateAll();
+    return { ok: true };
+  } catch (e) {
+    console.error("[action] releaseProduct:", e);
+    return { ok: false, reason: "error" };
+  }
+}
+
+/** Undo a release — bring it back into consideration. */
+export async function unreleaseProduct(
+  productId: string,
+): Promise<ActionResult> {
+  if (!hasDatabase()) return NO_DB;
+  try {
+    await prisma.product.update({
+      where: { id: productId },
+      data: { releasedAt: null },
+    });
+    revalidateAll();
+    return { ok: true };
+  } catch (e) {
+    console.error("[action] unreleaseProduct:", e);
+    return { ok: false, reason: "error" };
+  }
+}
+
 export async function updateNotes(
   productId: string,
   notes: string,

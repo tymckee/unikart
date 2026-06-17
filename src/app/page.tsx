@@ -67,14 +67,13 @@ export default function LandingPage() {
               </Pill>
             </div>
             <h1 className="text-balance text-4xl font-semibold leading-[1.05] tracking-tight text-ink sm:text-6xl">
-              Save anything.
+              Shopping without
               <br />
-              Buy at the right moment.
+              the noise.
             </h1>
             <p className="mx-auto mt-5 max-w-xl text-pretty text-lg text-slate">
-              UniKart keeps every product you&apos;re eyeing in one calm place —
-              tracking price and stock, and guiding you through checkout across
-              stores.
+              Save anything you&apos;re considering, track what changes, and buy
+              when it feels right.
             </p>
 
             <div className="mx-auto mt-9 max-w-xl">
@@ -82,8 +81,11 @@ export default function LandingPage() {
                 <CommandPasteBar variant="hero" redirectAfterSave="/dashboard" />
               </HubProvider>
               <div className="mt-5 flex items-center justify-center gap-3">
+                <Button href="/dashboard">
+                  Start your calm cart <ArrowRight size={16} />
+                </Button>
                 <Button href="/demo" variant="secondary">
-                  Try the demo <ArrowRight size={16} />
+                  Try the demo
                 </Button>
                 <PasteHint />
               </div>
@@ -147,7 +149,7 @@ export default function LandingPage() {
             <Feature
               icon={<TrendingDown size={20} />}
               title="Know when to buy"
-              body="Price history, target alerts, and a calm Buy / Wait / Watch read on every item you're tracking."
+              body="Price history, target alerts, and a calm Signal — Buy, Wait, or Watch — on every item you're tracking."
             />
             <Feature
               icon={<ShoppingBag size={20} />}
@@ -182,12 +184,12 @@ export default function LandingPage() {
             <WheelLogo size={64} spinning className="text-ink" />
           </div>
           <h2 className="mt-6 text-balance text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-            Hub. Spokes. Rim.
+            Balance in motion.
           </h2>
           <p className="mx-auto mt-3 max-w-lg text-pretty text-slate">
-            A wheel is balance in motion — a hub at the center, spokes holding it
-            true, a rim that carries you forward. UniKart brings that same quiet
-            order to everything you want to buy.
+            A wheel is balance in motion — a hub at the center, a rim that
+            carries you forward. UniKart brings that same quiet order to
+            everything you want to buy.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3 text-sm text-slate">
             <span className="inline-flex items-center gap-1.5">

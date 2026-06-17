@@ -79,6 +79,7 @@ model Product {
   isArchived         Boolean   @default(false)
   isPurchased        Boolean   @default(false)
   purchasedAt        DateTime?
+  releasedAt         DateTime? // consciously let go of — releasing the urge to buy (no guilt)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   lastCheckedAt      DateTime?

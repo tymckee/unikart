@@ -29,9 +29,9 @@ export default async function CollectionsPage() {
   return (
     <div className="space-y-8">
       <PageHeader
-        eyebrow="Spokes"
+        eyebrow="Collections"
         title="Collections"
-        subtitle="Group what you save into spokes — Tech, Home, Gifts, Travel. Each one is part of the same wheel."
+        subtitle="Group what you save into collections — Tech, Home, Gifts, Travel. Each one is part of the same wheel."
         action={<NewCollectionButton />}
       />
 

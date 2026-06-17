@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, ExternalLink } from "lucide-react";
+import { ChevronLeft, Clock, ExternalLink } from "lucide-react";
 import { getCollectionsWithCounts, getProductView } from "@/lib/data";
 import { buyBrain } from "@/lib/buy-brain";
-import { formatPrice, prettyDomain, priceDelta, timeAgo } from "@/lib/utils";
+import {
+  durationSince,
+  formatPrice,
+  prettyDomain,
+  priceDelta,
+  timeAgo,
+} from "@/lib/utils";
 import { ProductTile } from "@/components/product/ProductTile";
 import { StockBadge, ConfidenceMeter } from "@/components/product/StockBadge";
 import { PriceHistoryChart } from "@/components/product/PriceHistoryChart";
@@ -146,6 +152,20 @@ export default async function ProductDetailPage({
                 </span>
               </div>
 
+              {/* How long this has been waiting — quiet, intentional */}
+              <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-slate">
+                <Clock size={12} className="text-silver" />
+                {product.releasedAt ? (
+                  <span>
+                    Considered for{" "}
+                    {durationSince(product.createdAt, product.releasedAt)} before
+                    you let it go
+                  </span>
+                ) : (
+                  <span>Considering for {durationSince(product.createdAt, now)}</span>
+                )}
+              </p>
+
               <div className="mt-5 flex gap-2">
                 <ShareButton title={product.title} />
                 <EditProductButton product={product} />
@@ -216,7 +236,7 @@ export default async function ProductDetailPage({
           </div>
         </div>
 
-        {/* Right — Buy Brain + actions */}
+        {/* Right — Signal + actions */}
         <div className="space-y-5">
           <BuyBrainPanel result={brain} factors={factors} />
           <ProductDetailActions product={product} />

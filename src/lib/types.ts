@@ -123,6 +123,8 @@ export interface Product {
   isArchived: boolean;
   isPurchased: boolean;
   purchasedAt?: string | null;
+  /** When the user consciously let this go (released the urge to buy). */
+  releasedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   lastCheckedAt?: string | null;

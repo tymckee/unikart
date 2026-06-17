@@ -55,6 +55,33 @@ export function timeAgo(date: Date | string | number, now = Date.now()): string 
   return `${Math.round(d / 365)}y ago`;
 }
 
+/**
+ * Calm, human duration between two moments — e.g. "12 days", "3 weeks",
+ * "2 months". Used to show how long an item has been waiting (createdAt → now)
+ * or how long it was considered before being released (createdAt → releasedAt).
+ * Always rounds to a single, gentle unit; never compounds ("1 month, 2 days").
+ */
+export function durationSince(
+  from: Date | string | number,
+  to: Date | string | number = Date.now(),
+): string {
+  const start = new Date(from).getTime();
+  const end = new Date(to).getTime();
+  const diff = Math.max(0, end - start);
+  const min = Math.round(diff / 60000);
+  if (min < 60) return min <= 1 ? "a moment" : `${min} minutes`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return hr === 1 ? "an hour" : `${hr} hours`;
+  const d = Math.round(hr / 24);
+  if (d < 14) return d === 1 ? "a day" : `${d} days`;
+  const w = Math.round(d / 7);
+  if (w < 9) return `${w} weeks`;
+  const mo = Math.round(d / 30);
+  if (mo < 12) return mo === 1 ? "a month" : `${mo} months`;
+  const y = Math.round(d / 365);
+  return y === 1 ? "a year" : `${y} years`;
+}
+
 /** Pull a clean display domain from a URL or domain string. */
 export function prettyDomain(input: string): string {
   try {

@@ -106,6 +106,7 @@ function mapProduct(p: ProductWithRelations, cartIds: Set<string>): ProductView 
     isArchived: p.isArchived,
     isPurchased: p.isPurchased,
     purchasedAt: isoN(p.purchasedAt),
+    releasedAt: isoN(p.releasedAt),
     createdAt: iso(p.createdAt),
     updatedAt: iso(p.updatedAt),
     lastCheckedAt: isoN(p.lastCheckedAt),

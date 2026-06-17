@@ -77,6 +77,7 @@ async function main() {
         isArchived: p.isArchived,
         isPurchased: p.isPurchased,
         purchasedAt: d(p.purchasedAt),
+        releasedAt: d(p.releasedAt),
         createdAt: d(p.createdAt)!,
         updatedAt: d(p.updatedAt)!,
         lastCheckedAt: d(p.lastCheckedAt),

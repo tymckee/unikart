@@ -58,7 +58,7 @@ export function NewCollectionButton() {
         open={open}
         onClose={() => !pending && setOpen(false)}
         title="New collection"
-        description="A spoke to group products you save."
+        description="A collection to group products you save."
       >
         <div className="space-y-4 px-6 pb-6 pt-4">
           <div>

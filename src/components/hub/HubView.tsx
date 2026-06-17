@@ -24,7 +24,8 @@ type Filter =
   | "back"
   | "out"
   | "cart"
-  | "purchased";
+  | "purchased"
+  | "released";
 
 export function HubView({
   initial,
@@ -52,14 +53,20 @@ export function HubView({
       const d = priceDelta(p.currentPrice, p.previousPrice);
       return d?.direction === "down";
     };
+    // Releasing something is a conscious "let it go" — it leaves the active Hub
+    // entirely (like archive/purchase) and lives only under its own filter.
+    const active = (p: ProductView) =>
+      !p.isArchived && !p.isPurchased && !p.releasedAt;
     return {
-      all: (p: ProductView) => !p.isArchived && !p.isPurchased,
-      watching: (p: ProductView) => Boolean(p.alert?.enabled) && !p.isPurchased,
-      drops: (p: ProductView) => isDrop(p) && !p.isPurchased,
-      back: (p: ProductView) => backSet.has(p.id),
-      out: (p: ProductView) => p.availability === "out_of_stock",
-      cart: (p: ProductView) => p.inCart,
+      all: active,
+      watching: (p: ProductView) => active(p) && Boolean(p.alert?.enabled),
+      drops: (p: ProductView) => active(p) && isDrop(p),
+      back: (p: ProductView) => active(p) && backSet.has(p.id),
+      out: (p: ProductView) =>
+        active(p) && p.availability === "out_of_stock",
+      cart: (p: ProductView) => active(p) && p.inCart,
       purchased: (p: ProductView) => p.isPurchased,
+      released: (p: ProductView) => Boolean(p.releasedAt),
     } satisfies Record<Filter, (p: ProductView) => boolean>;
   }, [backSet]);
 
@@ -84,6 +91,10 @@ export function HubView({
     { value: "out" as const, label: "Out of stock", count: counts.out },
     { value: "cart" as const, label: "In cart", count: counts.cart },
     { value: "purchased" as const, label: "Purchased", count: counts.purchased },
+    // Only surface "Released" once you've let something go — keeps it quiet.
+    ...(counts.released > 0
+      ? [{ value: "released" as const, label: "Released", count: counts.released }]
+      : []),
   ];
 
   return (
@@ -209,6 +220,11 @@ function EmptyForFilter({ filter }: { filter: Filter }) {
     purchased: {
       title: "No purchases yet",
       description: "Items you mark as purchased will be archived here.",
+    },
+    released: {
+      title: "Nothing released yet",
+      description:
+        "When you let go of something you were considering, it rests here — no pressure to come back.",
     },
   };
   const c = copy[filter];

@@ -1,4 +1,4 @@
-import { Brain } from "lucide-react";
+import { Activity } from "lucide-react";
 import { cn, formatPrice } from "@/lib/utils";
 import type { BuyBrainResult } from "@/lib/buy-brain";
 import { WheelRing } from "@/components/brand/WheelRing";
@@ -20,7 +20,7 @@ interface BuyBrainPanelProps {
   className?: string;
 }
 
-/** "Buy Brain" — calm, deterministic Buy / Wait / Watch guidance. */
+/** "Signal" — calm, deterministic Buy / Wait / Watch guidance. */
 export function BuyBrainPanel({
   result,
   factors = [],
@@ -37,8 +37,8 @@ export function BuyBrainPanel({
       )}
     >
       <div className="mb-4 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate">
-        <Brain size={14} className="text-accent" />
-        Buy Brain
+        <Activity size={14} className="text-accent" />
+        Signal: {v.label}
       </div>
 
       <div className="flex items-center gap-4">
@@ -57,8 +57,8 @@ export function BuyBrainPanel({
           <p className="text-base font-semibold text-ink">{result.headline}</p>
           <p className="mt-1 text-pretty text-sm text-slate">{result.reason}</p>
           <p className="mt-2 text-[0.6875rem] text-silver">
-            {Math.round(result.confidence * 100)}% confidence · not financial
-            advice
+            {Math.round(result.confidence * 100)}% confidence · Based on tracked
+            price history
           </p>
         </div>
       </div>
@@ -76,7 +76,7 @@ export function BuyBrainPanel({
   );
 }
 
-/** Build human factor chips from a product for the Buy Brain panel. */
+/** Build human factor chips from a product for the Signal panel. */
 export function buyBrainFactors(p: {
   currentPrice: number | null;
   lowestPrice?: number | null;
