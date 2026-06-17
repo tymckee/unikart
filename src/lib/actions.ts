@@ -11,36 +11,44 @@ import type { Availability, MetadataConfidence } from "./types";
 
 const USER_ID = "user_1";
 
-/** Read a product preview from a pasted URL (server-side fetch + parse), then
- * AI-clean the name so the save modal shows a tidy, human product name instead
- * of the retailer's keyword-stuffed title. Uses scraped bullets/description
- * when available; degrades to a heuristic when there's no ANTHROPIC_API_KEY. */
+/** Read a product preview from a pasted URL (server-side fetch + parse). Kept
+ * fast — just the fetch/scrape — so the paste→preview round-trip stays well
+ * under the serverless function timeout. The AI name-cleanup + gist run in
+ * saveProduct (a separate request), so we don't chain two ~5s network calls
+ * (ScraperAPI + Claude) into one action. */
 export async function parseProductUrl(url: string): Promise<ParsePreview> {
-  const preview = await parseProduct(url);
+  return parseProduct(url);
+}
+
+/** Best-effort AI normalization: a clean name + cached gist from whatever we
+ * captured. Returns the (possibly cleaned) title and the gist JSON to store. */
+async function normalizeForSave(
+  input: SaveProductInput,
+): Promise<{ title: string; gistJson: string | null }> {
+  const title = input.title.trim();
   try {
     const pageText =
-      typeof preview.rawMetadata?.pageText === "string"
-        ? preview.rawMetadata.pageText
+      input.rawMetadata && typeof input.rawMetadata.pageText === "string"
+        ? input.rawMetadata.pageText
         : null;
+    const description = (pageText || input.description || "").slice(0, 3000);
     const gist = await summarizeProduct({
-      title: preview.title,
-      description: pageText || preview.description,
-      brand: preview.brand,
-      category: preview.category,
-      storeName: preview.storeName,
+      title,
+      description,
+      brand: input.brand,
+      category: input.category,
+      storeName: input.storeName,
     });
-    const cleanName = gist?.cleanName?.trim();
-    if (
-      cleanName &&
-      cleanName.length >= 3 &&
-      cleanName.toLowerCase() !== preview.title.toLowerCase()
-    ) {
-      return { ...preview, title: cleanName };
-    }
+    if (!gist) return { title, gistJson: null };
+    const cleanName = gist.cleanName?.trim();
+    return {
+      title: cleanName && cleanName.length >= 3 ? cleanName : title,
+      gistJson: JSON.stringify(gist),
+    };
   } catch (e) {
-    console.error("[action] parseProductUrl normalize:", e);
+    console.error("[action] normalizeForSave:", e);
+    return { title, gistJson: null };
   }
-  return preview;
 }
 
 /** Manually run the price/stock check (the "Run check now" button). */
@@ -122,10 +130,12 @@ export async function saveProduct(
   try {
     const currency = input.currency ?? "USD";
     const price = input.price ?? null;
+    const { title, gistJson } = await normalizeForSave(input);
     const product = await prisma.product.create({
       data: {
         userId: USER_ID,
-        title: input.title.trim(),
+        title,
+        gist: gistJson,
         description: input.description ?? null,
         originalUrl: input.originalUrl.trim(),
         canonicalUrl: input.canonicalUrl ?? input.originalUrl.trim(),

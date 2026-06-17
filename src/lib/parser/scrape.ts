@@ -16,7 +16,10 @@ import { prettyDomain } from "../utils";
  */
 
 const ENDPOINT = "https://api.scraperapi.com";
-const SCRAPE_TIMEOUT_MS = 70_000;
+// Bounded so a slow ScraperAPI response can't blow the serverless function
+// budget (Netlify free = 10s). A slow call aborts and degrades to the URL
+// fallback rather than timing out the whole request.
+const SCRAPE_TIMEOUT_MS = 8_000;
 const MAX_HTML_BYTES = 4_000_000;
 
 function priceNum(v: unknown): number | null {
@@ -120,15 +123,17 @@ export async function scrapeStructured(url: string): Promise<ParsePreview | null
   if (!key) return null;
   const domain = prettyDomain(url);
   if (!/(^|\.)amazon\./i.test(domain)) return null;
-  const asin = amazonAsin(url);
-  if (!asin) return null;
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), SCRAPE_TIMEOUT_MS);
   try {
+    // Prefer the ASIN, but fall back to the full URL (ScraperAPI accepts either)
+    // so odd URL forms (mobile, share links, extra path/query) still resolve.
+    const asin = amazonAsin(url);
+    const param = asin ? `asin=${asin}` : `url=${encodeURIComponent(url)}`;
     const api = `${ENDPOINT}/structured/amazon/product?api_key=${encodeURIComponent(
       key,
-    )}&asin=${asin}&country=us`;
+    )}&${param}&country=us`;
     const res = await fetch(api, { signal: ctrl.signal });
     if (!res.ok) return null;
     const d = (await res.json()) as AmazonProduct;

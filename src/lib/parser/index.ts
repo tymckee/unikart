@@ -1,10 +1,10 @@
 import { extractProduct } from "./extract";
-import { scrapeRender, scrapeStructured } from "./scrape";
+import { scrapeStructured } from "./scrape";
 import { simulateParse, type ParsePreview } from "../parse-preview";
 
 const USER_AGENT =
   "UniKartBot/1.0 (+https://uni-kart.com; saves a product preview on user request)";
-const FETCH_TIMEOUT_MS = 9000;
+const FETCH_TIMEOUT_MS = 6000;
 const MAX_HTML_BYTES = 2_000_000;
 
 function normalize(raw: string): string {
@@ -149,19 +149,21 @@ export async function parseProduct(rawUrl: string): Promise<ParsePreview> {
   const structured = await scrapeStructured(url);
   if (structured) return structured;
 
-  // 2. Polite direct fetch first (free, fast) — works for cooperative sites.
+  // Amazon hard-blocks the polite bot, so if the structured call didn't return
+  // (slow → aborted, or failed), skip the doomed direct fetch and degrade to the
+  // URL fallback. Keeps the request well under the function timeout.
+  if (/(^|\.)amazon\./i.test(new URL(url).hostname)) return simulateParse(rawUrl);
+
+  // 2. Polite direct fetch (free, fast) — works for cooperative sites.
+  //    (ScraperAPI render is deliberately NOT in this synchronous path: it can
+  //    take 30–60s and fails on the free tier for Akamai-hard sites, which blew
+  //    the serverless function budget. Render belongs in a later background /
+  //    premium enrichment, not the live paste→preview round-trip.)
   const directHtml = await fetchHtml(url);
   const direct = directHtml ? safeExtract(directHtml, url) : null;
   if (isUsable(direct)) return direct;
 
-  // 3. Polite fetch got nothing usable (blocked / price stripped) → ScraperAPI
-  //    render, then parse the JS-rendered HTML. No-op without a key, and
-  //    protected sites needing premium proxies (paid) simply return null here.
-  const renderedHtml = await scrapeRender(url);
-  const rendered = renderedHtml ? safeExtract(renderedHtml, url) : null;
-  if (isUsable(rendered)) return rendered;
-
-  // 4. Nothing usable anywhere → honest URL-only fallback (no fabricated price).
+  // 3. Nothing usable → honest URL-only fallback (no fabricated price).
   return simulateParse(rawUrl);
 }
 
