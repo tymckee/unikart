@@ -62,12 +62,22 @@ async function setUserPlan(referenceId: string, plan: "free" | "pro") {
 }
 
 const PRO_STATUSES = new Set(["active", "trialing", "past_due"]);
+
+// The internal Ops Console runs on its own subdomain (ops.uni-kart.com). Sign-in
+// happens on that origin, so it must be a trusted origin too — otherwise Better
+// Auth rejects the request with "Invalid origin". Derived from OPS_HOST so it
+// tracks the deployment config.
+const OPS_ORIGIN = `https://${(process.env.OPS_HOST || "ops.uni-kart.com")
+  .trim()
+  .toLowerCase()}`;
+
 // Origin must not carry a trailing slash. Always trust the production origins
 // for passkey ceremonies too, so a custom-domain request still verifies.
 const passkeyOrigins = Array.from(
   new Set([
     SITE_URL.replace(/\/$/, ""),
     "https://uni-kart.com",
+    OPS_ORIGIN,
     "http://localhost:3000",
   ]),
 );
@@ -124,6 +134,7 @@ export const auth = betterAuth({
   trustedOrigins: [
     "https://uni-kart.com",
     "https://www.uni-kart.com",
+    OPS_ORIGIN, // ops.uni-kart.com — the Ops Console signs in on its own subdomain
     "http://localhost:3000",
   ],
 
