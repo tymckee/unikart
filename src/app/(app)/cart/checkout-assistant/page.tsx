@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { getCartView } from "@/lib/mock-data";
+import { getCartView } from "@/lib/data";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { CheckoutAssistant } from "@/components/cart/CheckoutAssistant";
 
 export const metadata: Metadata = { title: "Checkout Assistant" };
+export const dynamic = "force-dynamic";
 
-export default function CheckoutAssistantPage() {
-  const { items } = getCartView();
+export default async function CheckoutAssistantPage() {
+  const { items } = await getCartView();
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">

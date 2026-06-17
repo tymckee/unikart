@@ -42,3 +42,9 @@ next-env.d.ts
 
 # Claude Code local tooling
 .claude/
+
+# Prisma — generated client + local SQLite database (migrations ARE committed)
+/src/generated/prisma
+prisma/dev.db
+prisma/dev.db-journal
+prisma/*.db

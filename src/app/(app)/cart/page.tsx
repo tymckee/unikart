@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
-import { getCartView } from "@/lib/mock-data";
+import { getCartView } from "@/lib/data";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { CartView } from "@/components/cart/CartView";
 
 export const metadata: Metadata = { title: "Universal Cart" };
+export const dynamic = "force-dynamic";
 
-export default function CartPage() {
-  const { items } = getCartView();
+export default async function CartPage() {
+  const { items } = await getCartView();
 
   return (
     <div className="space-y-6">

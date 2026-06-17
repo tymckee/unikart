@@ -2,19 +2,22 @@ import type { Metadata } from "next";
 import { Sparkles } from "lucide-react";
 import { HubView } from "@/components/hub/HubView";
 import {
+  getBackInStockIds,
   getCartView,
+  getCollectionsWithCounts,
   getProductViews,
-  mockNotifications,
-} from "@/lib/mock-data";
+} from "@/lib/data";
 
 export const metadata: Metadata = { title: "Demo" };
+export const dynamic = "force-dynamic";
 
-export default function DemoPage() {
-  const products = getProductViews();
-  const { total } = getCartView();
-  const backInStockIds = mockNotifications
-    .filter((n) => n.type === "back_in_stock" && n.productId)
-    .map((n) => n.productId as string);
+export default async function DemoPage() {
+  const [products, cart, backInStockIds, collections] = await Promise.all([
+    getProductViews(),
+    getCartView(),
+    getBackInStockIds(),
+    getCollectionsWithCounts(),
+  ]);
 
   return (
     <div className="space-y-5">
@@ -28,7 +31,8 @@ export default function DemoPage() {
       <HubView
         initial={products}
         backInStockIds={backInStockIds}
-        cartTotal={total}
+        cartTotal={cart.total}
+        collections={collections.map((c) => ({ id: c.id, name: c.name }))}
       />
     </div>
   );

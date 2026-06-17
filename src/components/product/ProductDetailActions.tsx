@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Archive,
@@ -11,17 +11,26 @@ import {
 } from "lucide-react";
 import { formatPrice } from "@/lib/utils";
 import type { ProductView } from "@/lib/types";
+import {
+  addToCart,
+  archiveProduct,
+  markPurchased,
+  removeProductFromCart,
+  setAlert,
+  updateNotes,
+} from "@/lib/actions";
 import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Switch } from "@/components/ui/Switch";
 import { Textarea } from "@/components/ui/Input";
 
 /**
- * Interactive controls on the product detail page. Phase 1 keeps state
- * local; Phase 2 wires these to server actions + Prisma.
+ * Interactive controls on the product detail page, wired to server actions.
+ * Local state is optimistic; the server is the source of truth on refresh.
  */
 export function ProductDetailActions({ product }: { product: ProductView }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [inCart, setInCart] = useState(product.inCart);
   const [watching, setWatching] = useState(Boolean(product.alert?.enabled));
   const [target, setTarget] = useState(
@@ -29,6 +38,21 @@ export function ProductDetailActions({ product }: { product: ProductView }) {
   );
   const [notes, setNotes] = useState(product.notes ?? "");
   const [purchased, setPurchased] = useState(product.isPurchased);
+  const [notesSaved, setNotesSaved] = useState(false);
+
+  const run = (fn: () => Promise<unknown>) =>
+    startTransition(async () => {
+      await fn();
+      router.refresh();
+    });
+
+  const saveAlert = (enabled: boolean) =>
+    run(() =>
+      setAlert(product.id, {
+        enabled,
+        targetPrice: target ? Number(target) : null,
+      }),
+    );
 
   return (
     <div className="space-y-5">
@@ -37,7 +61,13 @@ export function ProductDetailActions({ product }: { product: ProductView }) {
         <Button
           className="w-full"
           variant={inCart ? "secondary" : "primary"}
-          onClick={() => setInCart((v) => !v)}
+          onClick={() => {
+            const next = !inCart;
+            setInCart(next);
+            run(() =>
+              next ? addToCart(product.id) : removeProductFromCart(product.id),
+            );
+          }}
         >
           {inCart ? <Check size={17} /> : <ShoppingBag size={17} />}
           {inCart ? "In your Universal Cart" : "Add to Universal Cart"}
@@ -56,7 +86,12 @@ export function ProductDetailActions({ product }: { product: ProductView }) {
             variant="ghost"
             size="sm"
             className="flex-1"
-            onClick={() => setPurchased((v) => !v)}
+            disabled={purchased}
+            onClick={() => {
+              setPurchased(true);
+              setInCart(false);
+              run(() => markPurchased(product.id));
+            }}
           >
             <CheckCircle2 size={15} />
             {purchased ? "Purchased" : "Mark purchased"}
@@ -65,7 +100,12 @@ export function ProductDetailActions({ product }: { product: ProductView }) {
             variant="ghost"
             size="sm"
             className="flex-1"
-            onClick={() => router.push("/dashboard")}
+            onClick={() =>
+              startTransition(async () => {
+                await archiveProduct(product.id);
+                router.push("/dashboard");
+              })
+            }
           >
             <Archive size={15} />
             Archive
@@ -84,7 +124,10 @@ export function ProductDetailActions({ product }: { product: ProductView }) {
           </div>
           <Switch
             checked={watching}
-            onCheckedChange={setWatching}
+            onCheckedChange={(v) => {
+              setWatching(v);
+              saveAlert(v);
+            }}
             label="Toggle price alert"
           />
         </div>
@@ -100,6 +143,7 @@ export function ProductDetailActions({ product }: { product: ProductView }) {
                 onChange={(e) =>
                   setTarget(e.target.value.replace(/[^0-9.]/g, ""))
                 }
+                onBlur={() => saveAlert(true)}
                 inputMode="decimal"
                 placeholder={
                   product.currentPrice
@@ -129,10 +173,26 @@ export function ProductDetailActions({ product }: { product: ProductView }) {
 
       {/* Notes */}
       <GlassCard variant="solid" className="p-5">
-        <h3 className="mb-2.5 text-sm font-semibold text-ink">Notes</h3>
+        <div className="mb-2.5 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-ink">Notes</h3>
+          {notesSaved && (
+            <span className="inline-flex items-center gap-1 text-xs text-down">
+              <Check size={13} /> Saved
+            </span>
+          )}
+        </div>
         <Textarea
           value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          onChange={(e) => {
+            setNotes(e.target.value);
+            setNotesSaved(false);
+          }}
+          onBlur={() =>
+            run(async () => {
+              await updateNotes(product.id, notes);
+              setNotesSaved(true);
+            })
+          }
           rows={3}
           placeholder="Size, color, who it's for, why you're waiting…"
         />

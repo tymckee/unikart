@@ -12,6 +12,7 @@ import type { ProductView } from "@/lib/types";
 import { useHub } from "@/components/hub/HubProvider";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { CommandPasteBar } from "@/components/product/CommandPasteBar";
+import { ManualAddButton } from "@/components/product/ManualAddButton";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -29,10 +30,12 @@ export function HubView({
   initial,
   backInStockIds,
   cartTotal,
+  collections = [],
 }: {
   initial: ProductView[];
   backInStockIds: string[];
   cartTotal: number;
+  collections?: { id: string; name: string }[];
 }) {
   const hub = useHub();
   const [filter, setFilter] = useState<Filter>("all");
@@ -89,11 +92,12 @@ export function HubView({
         eyebrow="Your Hub"
         title="Everything you're watching"
         subtitle="Paste a link to save anything from across the web. We'll track price and stock so you know exactly when to buy."
+        action={<ManualAddButton collections={collections} />}
       />
 
       {/* Prominent paste bar (mobile — desktop has it in the top bar) */}
       <div className="md:hidden">
-        <CommandPasteBar />
+        <CommandPasteBar collections={collections} />
       </div>
 
       {/* Stats */}

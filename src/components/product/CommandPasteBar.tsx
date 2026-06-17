@@ -6,6 +6,7 @@ import { ArrowRight, Check, Link2, Sparkles } from "lucide-react";
 import { cn, formatPrice, looksLikeUrl, prettyDomain } from "@/lib/utils";
 import { simulateParse, type ParsePreview } from "@/lib/parse-preview";
 import { mockCollections } from "@/lib/mock-data";
+import { saveProduct } from "@/lib/actions";
 import { useHub } from "@/components/hub/HubProvider";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -21,6 +22,8 @@ interface CommandPasteBarProps {
   className?: string;
   /** Where to go after a successful save. Defaults to staying put. */
   redirectAfterSave?: string;
+  /** Real DB collections for the picker; falls back to mock when absent. */
+  collections?: { id: string; name: string }[];
 }
 
 export function CommandPasteBar({
@@ -28,7 +31,10 @@ export function CommandPasteBar({
   autoFocus = false,
   className,
   redirectAfterSave,
+  collections,
 }: CommandPasteBarProps) {
+  const collectionOptions =
+    collections && collections.length ? collections : mockCollections;
   const router = useRouter();
   const hub = useHub();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -40,7 +46,7 @@ export function CommandPasteBar({
   const [preview, setPreview] = useState<ParsePreview | null>(null);
 
   // Save options
-  const [collectionId, setCollectionId] = useState(mockCollections[0].id);
+  const [collectionId, setCollectionId] = useState(collectionOptions[0].id);
   const [watch, setWatch] = useState(true);
   const [target, setTarget] = useState("");
 
@@ -69,24 +75,53 @@ export function CommandPasteBar({
     setValue("");
     setTarget("");
     setWatch(true);
-    setCollectionId(mockCollections[0].id);
+    setCollectionId(collectionOptions[0].id);
+    setError(null);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!preview) return;
+    const opts = {
+      collectionId,
+      watch,
+      targetPrice: target ? Number(target) : null,
+    };
     setStatus("saving");
+
+    const res = await saveProduct({
+      title: preview.title,
+      description: preview.description,
+      originalUrl: preview.originalUrl,
+      canonicalUrl: preview.canonicalUrl,
+      storeName: preview.storeName,
+      storeDomain: preview.storeDomain,
+      category: preview.category,
+      currency: preview.currency,
+      price: preview.price,
+      availability: preview.availability,
+      confidence: preview.confidence,
+      ...opts,
+    });
+
+    if (!res.ok) {
+      if (res.reason === "no-database") {
+        // No database (e.g. preview deploy): fall back to the session store so
+        // the demo still "saves" within the visit.
+        hub?.add(preview, opts);
+      } else {
+        // Real failure — keep the sheet open and surface the error.
+        setStatus("idle");
+        setError(res.message ?? "We couldn't save that. Please try again.");
+        return;
+      }
+    }
+
+    setStatus("saved");
     later(() => {
-      hub?.add(preview, {
-        collectionId,
-        watch,
-        targetPrice: target ? Number(target) : null,
-      });
-      setStatus("saved");
-      later(() => {
-        reset();
-        if (redirectAfterSave) router.push(redirectAfterSave);
-      }, 1500);
-    }, 850);
+      reset();
+      if (redirectAfterSave) router.push(redirectAfterSave);
+      else router.refresh();
+    }, 1500);
   }
 
   const isHero = variant === "hero";
@@ -222,7 +257,7 @@ export function CommandPasteBar({
                   onChange={(e) => setCollectionId(e.target.value)}
                   className="h-11 w-full appearance-none rounded-xl border border-line bg-white px-4 pr-9 text-sm text-ink shadow-soft focus:border-accent/60 focus:outline-none focus:ring-4 focus:ring-accent/10"
                 >
-                  {mockCollections.map((c) => (
+                  {collectionOptions.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
@@ -264,6 +299,8 @@ export function CommandPasteBar({
                 </div>
               )}
             </Field>
+
+            {error && <p className="text-xs text-up">{error}</p>}
 
             {/* Actions */}
             <div className="flex gap-3 pt-1">

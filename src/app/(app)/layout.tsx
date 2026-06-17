@@ -1,15 +1,24 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { HubProvider } from "@/components/hub/HubProvider";
-import { getUnreadCount } from "@/lib/mock-data";
+import { getCollectionsWithCounts, getUnreadCount } from "@/lib/data";
 
-export default function AppGroupLayout({
+export default async function AppGroupLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const [unread, collections] = await Promise.all([
+    getUnreadCount(),
+    getCollectionsWithCounts(),
+  ]);
   return (
     <HubProvider>
-      <AppShell unread={getUnreadCount()}>{children}</AppShell>
+      <AppShell
+        unread={unread}
+        collections={collections.map((c) => ({ id: c.id, name: c.name }))}
+      >
+        {children}
+      </AppShell>
     </HubProvider>
   );
 }

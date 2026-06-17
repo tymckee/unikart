@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, ExternalLink } from "lucide-react";
-import { getProductView, NOW } from "@/lib/mock-data";
+import { getCollectionsWithCounts, getProductView } from "@/lib/data";
 import { buyBrain } from "@/lib/buy-brain";
 import { formatPrice, prettyDomain, priceDelta, timeAgo } from "@/lib/utils";
 import { ProductTile } from "@/components/product/ProductTile";
@@ -13,6 +13,9 @@ import {
   buyBrainFactors,
 } from "@/components/product/BuyBrainPanel";
 import { ProductDetailActions } from "@/components/product/ProductDetailActions";
+import { ProductCollectionsCard } from "@/components/product/ProductCollectionsCard";
+import { ShareButton } from "@/components/product/ShareButton";
+import { EditProductButton } from "@/components/product/EditProductButton";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Pill } from "@/components/ui/Pill";
 
@@ -22,9 +25,27 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const product = getProductView(id);
-  return { title: product ? product.title : "Product" };
+  const product = await getProductView(id);
+  if (!product) return { title: "Product" };
+  const price = formatPrice(product.currentPrice, product.currency);
+  const description = `${price} at ${product.storeName} — tracked on UniKart for price & stock changes.`;
+  return {
+    title: product.title,
+    description,
+    openGraph: {
+      title: `${product.title} · UniKart`,
+      description,
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${product.title} · UniKart`,
+      description,
+    },
+  };
 }
+
+export const dynamic = "force-dynamic";
 
 export default async function ProductDetailPage({
   params,
@@ -32,9 +53,11 @@ export default async function ProductDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const product = getProductView(id);
+  const product = await getProductView(id);
   if (!product) notFound();
 
+  const collections = await getCollectionsWithCounts();
+  const now = Date.now();
   const delta = priceDelta(product.currentPrice, product.previousPrice);
   const target = product.alert?.targetPrice ?? null;
   const brain = buyBrain(product, product.priceHistory, target);
@@ -112,6 +135,11 @@ export default async function ProductDetailPage({
                   {product.metadataConfidence} confidence
                 </span>
               </div>
+
+              <div className="mt-5 flex gap-2">
+                <ShareButton title={product.title} />
+                <EditProductButton product={product} />
+              </div>
             </div>
           </div>
 
@@ -148,7 +176,7 @@ export default async function ProductDetailPage({
               <div className="flex items-center justify-between">
                 <StockBadge availability={product.availability} />
                 <span className="text-xs text-slate">
-                  Checked {timeAgo(product.lastCheckedAt ?? product.updatedAt, NOW)}
+                  Checked {timeAgo(product.lastCheckedAt ?? product.updatedAt, now)}
                 </span>
               </div>
               <p className="mt-3 text-sm text-slate">
@@ -168,7 +196,7 @@ export default async function ProductDetailPage({
                 <Detail label="Store" value={product.storeName} />
                 <Detail
                   label="Added"
-                  value={timeAgo(product.createdAt, NOW)}
+                  value={timeAgo(product.createdAt, now)}
                 />
               </dl>
             </GlassCard>
@@ -179,6 +207,15 @@ export default async function ProductDetailPage({
         <div className="space-y-5">
           <BuyBrainPanel result={brain} factors={factors} />
           <ProductDetailActions product={product} />
+          <ProductCollectionsCard
+            productId={product.id}
+            selectedIds={product.collections.map((c) => c.id)}
+            allCollections={collections.map((c) => ({
+              id: c.id,
+              name: c.name,
+              icon: c.icon,
+            }))}
+          />
         </div>
       </div>
     </div>

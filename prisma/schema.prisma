@@ -1,0 +1,219 @@
+// UniKart — Prisma schema
+// Local dev uses SQLite (minimal friction). To move to Postgres later:
+//   1. change provider to "postgresql"
+//   2. point DATABASE_URL at the Postgres instance
+//   3. (optional) convert the String status/type columns to native enums
+// Enum-like fields are String because SQLite has no enum type; the TS union
+// types in src/lib/types.ts remain the source of truth and are cast in the
+// data-access layer.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  image     String?
+  plan      String   @default("free") // free | pro
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products      Product[]
+  collections   Collection[]
+  alerts        AlertRule[]
+  notifications Notification[]
+  carts         UniversalCart[]
+}
+
+model Collection {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  icon      String   @default("cpu")
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products ProductCollection[]
+
+  @@index([userId])
+}
+
+model Product {
+  id                 String    @id @default(cuid())
+  userId             String
+  title              String
+  description        String?
+  originalUrl        String
+  canonicalUrl       String?
+  imageUrl           String?
+  storeName          String
+  storeDomain        String
+  brand              String?
+  sku                String?
+  category           String?
+  currency           String    @default("USD")
+  currentPrice       Float?
+  previousPrice      Float?
+  lowestPrice        Float?
+  highestPrice       Float?
+  availability       String    @default("unknown") // in_stock | low_stock | out_of_stock | preorder | unknown
+  metadataConfidence String    @default("low") // high | medium | low
+  notes              String?
+  isArchived         Boolean   @default(false)
+  isPurchased        Boolean   @default(false)
+  purchasedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  lastCheckedAt      DateTime?
+
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  collections    ProductCollection[]
+  priceSnapshots PriceSnapshot[]
+  stockSnapshots StockSnapshot[]
+  alerts         AlertRule[]
+  cartItems      UniversalCartItem[]
+
+  @@index([userId])
+  @@index([storeDomain])
+}
+
+model ProductCollection {
+  productId    String
+  collectionId String
+
+  product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@id([productId, collectionId])
+  @@index([collectionId])
+}
+
+model PriceSnapshot {
+  id        String   @id @default(cuid())
+  productId String
+  price     Float
+  currency  String   @default("USD")
+  source    String   @default("mock") // mock | parser | manual | scheduled
+  checkedAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model StockSnapshot {
+  id           String   @id @default(cuid())
+  productId    String
+  availability String
+  source       String   @default("mock")
+  checkedAt    DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model AlertRule {
+  id          String   @id @default(cuid())
+  productId   String
+  userId      String
+  type        String // price_drop | price_rise | target_price | back_in_stock | out_of_stock
+  targetPrice Float?
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([userId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String?
+  cartId    String?
+  type      String // price_dropped | target_reached | back_in_stock | out_of_stock | price_increased | cart_reminder | checkout_incomplete
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model UniversalCart {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String   @default("Universal Cart")
+  status    String   @default("active") // active | checking_out | completed | archived
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items UniversalCartItem[]
+  steps CheckoutStep[]
+
+  @@index([userId])
+}
+
+model UniversalCartItem {
+  id             String    @id @default(cuid())
+  cartId         String
+  productId      String
+  quantity       Int       @default(1)
+  merchantStatus String    @default("unknown")
+  checkoutStatus String    @default("ready") // pending | ready | opened | completed | skipped
+  addedAt        DateTime  @default(now())
+  completedAt    DateTime?
+
+  cart    UniversalCart @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, productId])
+  @@index([cartId])
+}
+
+model CheckoutStep {
+  id                String    @id @default(cuid())
+  cartId            String
+  storeDomain       String
+  storeName         String
+  status            String    @default("pending")
+  estimatedSubtotal Float     @default(0)
+  currency          String    @default("USD")
+  checkoutUrl       String?
+  itemIds           String    @default("[]") // JSON array of cart item ids
+  openedAt          DateTime?
+  completedAt       DateTime?
+
+  cart UniversalCart @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  @@index([cartId])
+}
+
+model IntegrationAdapter {
+  id          String   @id @default(cuid())
+  name        String
+  type        String // merchant | payment | bnpl | agentic | affiliate
+  enabled     Boolean  @default(false)
+  status      String   @default("planned") // live | planned | beta
+  description String
+  configJson  String   @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

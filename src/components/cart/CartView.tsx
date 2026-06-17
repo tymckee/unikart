@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRight, Info, Store, Trash2 } from "lucide-react";
 import { formatPrice, prettyDomain } from "@/lib/utils";
 import type { ProductView, UniversalCartItem } from "@/lib/types";
+import { removeFromCartItem } from "@/lib/actions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
@@ -20,6 +22,8 @@ interface Row {
 }
 
 export function CartView({ initial }: { initial: Row[] }) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
   const [rows, setRows] = useState<Row[]>(initial);
 
   const groups = useMemo(() => {
@@ -46,8 +50,13 @@ export function CartView({ initial }: { initial: Row[] }) {
   ).length;
   const readiness = rows.length ? inStock / rows.length : 0;
 
-  const remove = (id: string) =>
+  const remove = (id: string) => {
     setRows((prev) => prev.filter((r) => r.item.id !== id));
+    startTransition(async () => {
+      await removeFromCartItem(id);
+      router.refresh();
+    });
+  };
 
   if (rows.length === 0) {
     return (

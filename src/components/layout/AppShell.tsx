@@ -33,9 +33,11 @@ const NAV: NavItem[] = [
 export function AppShell({
   children,
   unread = 0,
+  collections = [],
 }: {
   children: React.ReactNode;
   unread?: number;
+  collections?: { id: string; name: string }[];
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -89,7 +91,7 @@ export function AppShell({
 
             {/* Paste bar (desktop) */}
             <div className="hidden w-72 md:block xl:w-80">
-              <CommandPasteBar />
+              <CommandPasteBar collections={collections} />
             </div>
 
             {/* Notifications */}

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Archive,
@@ -16,18 +17,32 @@ import {
 } from "lucide-react";
 import { cn, formatPrice, priceDelta } from "@/lib/utils";
 import type { ProductView } from "@/lib/types";
+import {
+  addToCart,
+  archiveProduct,
+  removeProductFromCart,
+  setAlert,
+} from "@/lib/actions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Pill } from "@/components/ui/Pill";
 import { ProductTile } from "./ProductTile";
 import { StockBadge, ConfidenceMeter } from "./StockBadge";
 
 export function ProductCard({ product }: { product: ProductView }) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
   const [watching, setWatching] = useState(Boolean(product.alert?.enabled));
   const [inCart, setInCart] = useState(product.inCart);
   const [archived, setArchived] = useState(false);
 
   const delta = priceDelta(product.currentPrice, product.previousPrice);
   const hasTarget = product.alert?.type === "target_price" && product.alert.targetPrice;
+
+  const run = (fn: () => Promise<unknown>) =>
+    startTransition(async () => {
+      await fn();
+      router.refresh();
+    });
 
   const stop = (fn: () => void) => (e: React.MouseEvent) => {
     e.preventDefault();
@@ -73,14 +88,31 @@ export function ProductCard({ product }: { product: ProductView }) {
                   <QuickAction
                     label={watching ? "Watching" : "Watch"}
                     active={watching}
-                    onClick={stop(() => setWatching((v) => !v))}
+                    onClick={stop(() => {
+                      const next = !watching;
+                      setWatching(next);
+                      run(() =>
+                        setAlert(product.id, {
+                          enabled: next,
+                          targetPrice: product.alert?.targetPrice ?? null,
+                        }),
+                      );
+                    })}
                   >
                     <Eye size={16} />
                   </QuickAction>
                   <QuickAction
                     label={inCart ? "In cart" : "Add to cart"}
                     active={inCart}
-                    onClick={stop(() => setInCart((v) => !v))}
+                    onClick={stop(() => {
+                      const next = !inCart;
+                      setInCart(next);
+                      run(() =>
+                        next
+                          ? addToCart(product.id)
+                          : removeProductFromCart(product.id),
+                      );
+                    })}
                   >
                     {inCart ? <Check size={16} /> : <ShoppingCart size={16} />}
                   </QuickAction>
@@ -94,7 +126,10 @@ export function ProductCard({ product }: { product: ProductView }) {
                   </QuickAction>
                   <QuickAction
                     label="Archive"
-                    onClick={stop(() => setArchived(true))}
+                    onClick={stop(() => {
+                      setArchived(true);
+                      run(() => archiveProduct(product.id));
+                    })}
                   >
                     <Archive size={16} />
                   </QuickAction>

@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCheck, RefreshCw } from "lucide-react";
 import type { Notification } from "@/lib/types";
+import { markAllNotificationsRead } from "@/lib/actions";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -34,6 +36,8 @@ const SIMULATED: Array<Omit<Notification, "id" | "createdAt" | "read">> = [
 ];
 
 export function NotificationsView({ initial }: { initial: Notification[] }) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
   const [items, setItems] = useState(initial);
   const [tab, setTab] = useState<"all" | "unread">("all");
   const [checking, setChecking] = useState(false);
@@ -42,8 +46,13 @@ export function NotificationsView({ initial }: { initial: Notification[] }) {
   const unreadCount = items.filter((n) => !n.read).length;
   const shown = tab === "unread" ? items.filter((n) => !n.read) : items;
 
-  const markAllRead = () =>
+  const markAllRead = () => {
     setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+    startTransition(async () => {
+      await markAllNotificationsRead();
+      router.refresh();
+    });
+  };
 
   const runCheck = () => {
     setChecking(true);
