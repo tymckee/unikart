@@ -117,6 +117,8 @@ export interface Product {
   highestPrice?: number | null;
   availability: Availability;
   metadataConfidence: MetadataConfidence;
+  /** AI "the gist" cache — JSON string of { summary[], specs[] }. */
+  gist?: string | null;
   notes?: string | null;
   isArchived: boolean;
   isPurchased: boolean;

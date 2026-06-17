@@ -101,6 +101,7 @@ function mapProduct(p: ProductWithRelations, cartIds: Set<string>): ProductView 
     highestPrice: p.highestPrice,
     availability: p.availability as Availability,
     metadataConfidence: p.metadataConfidence as MetadataConfidence,
+    gist: p.gist,
     notes: p.notes,
     isArchived: p.isArchived,
     isPurchased: p.isPurchased,

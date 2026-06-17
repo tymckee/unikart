@@ -16,6 +16,8 @@ import { ProductDetailActions } from "@/components/product/ProductDetailActions"
 import { ProductCollectionsCard } from "@/components/product/ProductCollectionsCard";
 import { ShareButton } from "@/components/product/ShareButton";
 import { EditProductButton } from "@/components/product/EditProductButton";
+import { ProductGistCard } from "@/components/product/ProductGistCard";
+import type { ProductGist } from "@/lib/ai/gist";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Pill } from "@/components/ui/Pill";
 
@@ -58,6 +60,14 @@ export default async function ProductDetailPage({
 
   const collections = await getCollectionsWithCounts();
   const now = Date.now();
+  let initialGist: ProductGist | null = null;
+  if (product.gist) {
+    try {
+      initialGist = JSON.parse(product.gist) as ProductGist;
+    } catch {
+      /* ignore malformed cache */
+    }
+  }
   const delta = priceDelta(product.currentPrice, product.previousPrice);
   const target = product.alert?.targetPrice ?? null;
   const brain = buyBrain(product, product.priceHistory, target);
@@ -168,6 +178,9 @@ export default async function ProductDetailPage({
               targetPrice={target}
             />
           </GlassCard>
+
+          {/* The gist (AI) */}
+          <ProductGistCard productId={product.id} initial={initialGist} />
 
           {/* Availability + details */}
           <div className="grid gap-5 sm:grid-cols-2">

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { hasDatabase, prisma } from "./db";
 import { parseProduct } from "./parser";
 import { getCutout } from "./cutout";
+import { summarizeProduct, type ProductGist } from "./ai/gist";
 import { runPriceStockCheck } from "./jobs/price-stock";
 import type { ParsePreview } from "./parse-preview";
 import type { Availability, MetadataConfidence } from "./types";
@@ -436,6 +437,36 @@ export async function updateProduct(
     return { ok: true };
   } catch (e) {
     console.error("[action] updateProduct:", e);
+    return { ok: false, reason: "error" };
+  }
+}
+
+export async function generateGist(
+  productId: string,
+): Promise<ActionResult<ProductGist>> {
+  if (!hasDatabase()) return NO_DB;
+  try {
+    const p = await prisma.product.findUnique({
+      where: { id: productId },
+      select: {
+        title: true,
+        description: true,
+        brand: true,
+        category: true,
+        storeName: true,
+      },
+    });
+    if (!p) return { ok: false, reason: "not-found" };
+    const gist = await summarizeProduct(p);
+    if (!gist) return { ok: false, reason: "error" };
+    await prisma.product.update({
+      where: { id: productId },
+      data: { gist: JSON.stringify(gist) },
+    });
+    revalidatePath(`/products/${productId}`);
+    return { ok: true, data: gist };
+  } catch (e) {
+    console.error("[action] generateGist:", e);
     return { ok: false, reason: "error" };
   }
 }
