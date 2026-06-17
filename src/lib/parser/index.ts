@@ -1,4 +1,5 @@
 import { extractProduct } from "./extract";
+import { scrapeRender, scrapeStructured } from "./scrape";
 import { simulateParse, type ParsePreview } from "../parse-preview";
 
 const USER_AGENT =
@@ -124,28 +125,44 @@ async function fetchHtml(startUrl: string): Promise<string | null> {
  * with a timeout, never bypasses anti-bot systems, and falls back to a
  * URL-based heuristic (the mock adapter) when the page can't be read.
  */
+/** A result is worth keeping if it has any real signal (not the bare fallback). */
+function isUsable(r: ParsePreview | null): r is ParsePreview {
+  return Boolean(
+    r && (r.price != null || r.imageUrl || r.title !== `${r.storeName} product`),
+  );
+}
+
+function safeExtract(html: string, url: string): ParsePreview | null {
+  try {
+    return extractProduct(html, url);
+  } catch {
+    return null;
+  }
+}
+
 export async function parseProduct(rawUrl: string): Promise<ParsePreview> {
   const url = normalize(rawUrl);
   if (!isSafePublicUrl(url)) return simulateParse(rawUrl);
 
-  const html = await fetchHtml(url);
-  if (!html) return simulateParse(rawUrl);
+  // 1. Amazon → ScraperAPI structured endpoint (fast, free, clean JSON incl.
+  //    real price/image). No-op without SCRAPERAPI_KEY.
+  const structured = await scrapeStructured(url);
+  if (structured) return structured;
 
-  try {
-    const result = extractProduct(html, url);
-    // Trust the page whenever it yielded a real product signal — a real title
-    // (even if sparse, e.g. Amazon serves bots only the <title>), a price, or
-    // an image. Only when the page gave us nothing usable do we fall back to
-    // the URL heuristic, so we never paper a real save over with a fabricated
-    // (heuristic) price.
-    const gotRealTitle = result.title !== `${result.storeName} product`;
-    if (gotRealTitle || result.price != null || result.imageUrl) {
-      return result;
-    }
-    return simulateParse(rawUrl);
-  } catch {
-    return simulateParse(rawUrl);
-  }
+  // 2. Polite direct fetch first (free, fast) — works for cooperative sites.
+  const directHtml = await fetchHtml(url);
+  const direct = directHtml ? safeExtract(directHtml, url) : null;
+  if (isUsable(direct)) return direct;
+
+  // 3. Polite fetch got nothing usable (blocked / price stripped) → ScraperAPI
+  //    render, then parse the JS-rendered HTML. No-op without a key, and
+  //    protected sites needing premium proxies (paid) simply return null here.
+  const renderedHtml = await scrapeRender(url);
+  const rendered = renderedHtml ? safeExtract(renderedHtml, url) : null;
+  if (isUsable(rendered)) return rendered;
+
+  // 4. Nothing usable anywhere → honest URL-only fallback (no fabricated price).
+  return simulateParse(rawUrl);
 }
 
 export { extractProduct };
