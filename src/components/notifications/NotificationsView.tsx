@@ -12,23 +12,26 @@ import { WheelSpinner } from "@/components/brand/WheelLoader";
 import { NotificationCard } from "./NotificationCard";
 
 // Used only as the no-database fallback (preview deploy with no DATABASE_URL).
+// These are rendered client-side only and never persisted, so `userId` is a
+// cosmetic placeholder (never read) — not tied to any real account.
+const DEMO_USER_ID = "demo";
 const SIMULATED: Array<Omit<Notification, "id" | "createdAt" | "read">> = [
   {
-    userId: "user_1",
+    userId: DEMO_USER_ID,
     productId: "p_aeron",
     type: "price_dropped",
     title: "Price dropped on Herman Miller Aeron",
     body: "Now $1,345 — down $50 since the last check.",
   },
   {
-    userId: "user_1",
+    userId: DEMO_USER_ID,
     productId: "p_peakdesign",
     type: "price_dropped",
     title: "Peak Design Travel Backpack dipped",
     body: "Now $274.95, the lowest in 30 days.",
   },
   {
-    userId: "user_1",
+    userId: DEMO_USER_ID,
     productId: "p_switch2",
     type: "back_in_stock",
     title: "Back in stock: Nintendo Switch 2",

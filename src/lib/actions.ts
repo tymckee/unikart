@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { hasDatabase, prisma } from "./db";
+import { getCurrentUserId } from "./auth-helpers";
 import { parseProduct } from "./parser";
 import { enrichProduct } from "./enrich";
 import { getCutout } from "./cutout";
@@ -9,8 +10,6 @@ import { summarizeProduct, type ProductGist } from "./ai/gist";
 import { runPriceStockCheck } from "./jobs/price-stock";
 import type { ParsePreview } from "./parse-preview";
 import type { Availability, MetadataConfidence } from "./types";
-
-const USER_ID = "user_1";
 
 /** Read a product preview from a pasted URL (server-side fetch + parse). Kept
  * fast — just the fetch/scrape — so the paste→preview round-trip stays well
@@ -66,8 +65,10 @@ export async function runPriceCheckNow(): Promise<
 > {
   if (!hasDatabase()) return NO_DB;
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) return NO_AUTH;
     const limit = process.env.NODE_ENV === "production" ? 3 : 40;
-    const s = await runPriceStockCheck(limit);
+    const s = await runPriceStockCheck(limit, userId);
     revalidateAll();
     return {
       ok: true,
@@ -85,9 +86,14 @@ export async function runPriceCheckNow(): Promise<
 
 export type ActionResult<T = undefined> =
   | { ok: true; data?: T }
-  | { ok: false; reason: "no-database" | "not-found" | "error"; message?: string };
+  | {
+      ok: false;
+      reason: "no-database" | "not-found" | "error" | "unauthorized";
+      message?: string;
+    };
 
 const NO_DB = { ok: false, reason: "no-database" } as const;
+const NO_AUTH = { ok: false, reason: "unauthorized" } as const;
 
 function revalidateAll() {
   revalidatePath("/dashboard");
@@ -96,14 +102,14 @@ function revalidateAll() {
   revalidatePath("/notifications");
 }
 
-async function getOrCreateActiveCartId(): Promise<string> {
+async function getOrCreateActiveCartId(userId: string): Promise<string> {
   const existing = await prisma.universalCart.findFirst({
-    where: { userId: USER_ID, status: "active" },
+    where: { userId, status: "active" },
     select: { id: true },
   });
   if (existing) return existing.id;
   const created = await prisma.universalCart.create({
-    data: { userId: USER_ID, name: "Universal Cart", status: "active" },
+    data: { userId, name: "Universal Cart", status: "active" },
     select: { id: true },
   });
   return created.id;
@@ -138,12 +144,14 @@ export async function saveProduct(
     return { ok: false, reason: "error", message: "Title and URL are required." };
   }
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) return NO_AUTH;
     const currency = input.currency ?? "USD";
     const price = input.price ?? null;
     const { title, gistJson } = await normalizeForSave(input);
     const product = await prisma.product.create({
       data: {
-        userId: USER_ID,
+        userId,
         title,
         gist: gistJson,
         description: input.description ?? null,
@@ -174,7 +182,7 @@ export async function saveProduct(
             ? {
                 create: [
                   {
-                    userId: USER_ID,
+                    userId,
                     type: input.targetPrice ? "target_price" : "price_drop",
                     targetPrice: input.targetPrice ?? null,
                     enabled: true,
@@ -190,7 +198,7 @@ export async function saveProduct(
     // a stale/unknown collection id abort the product insert (FK violation).
     if (input.collectionId) {
       const col = await prisma.collection.findFirst({
-        where: { id: input.collectionId, userId: USER_ID },
+        where: { id: input.collectionId, userId },
         select: { id: true },
       });
       if (col) {
@@ -272,17 +280,21 @@ async function triggerEnrichment(input: EnrichTrigger): Promise<void> {
 export async function addToCart(productId: string): Promise<ActionResult> {
   if (!hasDatabase()) return NO_DB;
   try {
-    const cartId = await getOrCreateActiveCartId();
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
+    const userId = await getCurrentUserId();
+    if (!userId) return NO_AUTH;
+    // Only the owner can add their own product to their cart.
+    const product = await prisma.product.findFirst({
+      where: { id: productId, userId },
       select: { availability: true },
     });
+    if (!product) return { ok: false, reason: "not-found" };
+    const cartId = await getOrCreateActiveCartId(userId);
     await prisma.universalCartItem.upsert({
       where: { cartId_productId: { cartId, productId } },
       create: {
         cartId,
         productId,
-        merchantStatus: product?.availability ?? "unknown",
+        merchantStatus: product.availability ?? "unknown",
         checkoutStatus: "ready",
       },
       update: {},
@@ -298,7 +310,12 @@ export async function addToCart(productId: string): Promise<ActionResult> {
 export async function removeFromCartItem(itemId: string): Promise<ActionResult> {
   if (!hasDatabase()) return NO_DB;
   try {
-    await prisma.universalCartItem.delete({ where: { id: itemId } });
+    const userId = await getCurrentUserId();
+    if (!userId) return NO_AUTH;
+    // Scope the delete to items in the caller's own carts (IDOR guard).
+    await prisma.universalCartItem.deleteMany({
+      where: { id: itemId, cart: { userId } },
+    });
     revalidateAll();
     return { ok: true };
   } catch (e) {
@@ -312,8 +329,10 @@ export async function removeProductFromCart(
 ): Promise<ActionResult> {
   if (!hasDatabase()) return NO_DB;
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) return NO_AUTH;
     const cart = await prisma.universalCart.findFirst({
-      where: { userId: USER_ID, status: "active" },
+      where: { userId, status: "active" },
       select: { id: true },
     });
     if (cart) {
@@ -335,8 +354,16 @@ export async function setAlert(
 ): Promise<ActionResult> {
   if (!hasDatabase()) return NO_DB;
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) return NO_AUTH;
+    // The product must belong to the caller before we touch its alerts.
+    const owned = await prisma.product.findFirst({
+      where: { id: productId, userId },
+      select: { id: true },
+    });
+    if (!owned) return { ok: false, reason: "not-found" };
     const existing = await prisma.alertRule.findFirst({
-      where: { productId, userId: USER_ID },
+      where: { productId, userId },
       select: { id: true },
     });
     const type = opts.targetPrice ? "target_price" : "price_drop";
@@ -349,7 +376,7 @@ export async function setAlert(
       await prisma.alertRule.create({
         data: {
           productId,
-          userId: USER_ID,
+          userId,
           type,
           targetPrice: opts.targetPrice ?? null,
           enabled: true,
@@ -367,11 +394,16 @@ export async function setAlert(
 export async function markPurchased(productId: string): Promise<ActionResult> {
   if (!hasDatabase()) return NO_DB;
   try {
-    await prisma.product.update({
-      where: { id: productId },
+    const userId = await getCurrentUserId();
+    if (!userId) return NO_AUTH;
+    const { count } = await prisma.product.updateMany({
+      where: { id: productId, userId },
       data: { isPurchased: true, purchasedAt: new Date() },
     });
-    await prisma.universalCartItem.deleteMany({ where: { productId } });
+    if (!count) return { ok: false, reason: "not-found" };
+    await prisma.universalCartItem.deleteMany({
+      where: { productId, cart: { userId } },
+    });
     revalidateAll();
     return { ok: true };
   } catch (e) {
@@ -383,10 +415,13 @@ export async function markPurchased(productId: string): Promise<ActionResult> {
 export async function archiveProduct(productId: string): Promise<ActionResult> {
   if (!hasDatabase()) return NO_DB;
   try {
-    await prisma.product.update({
-      where: { id: productId },
+    const userId = await getCurrentUserId();
+    if (!userId) return NO_AUTH;
+    const { count } = await prisma.product.updateMany({
+      where: { id: productId, userId },
       data: { isArchived: true },
     });
+    if (!count) return { ok: false, reason: "not-found" };
     revalidateAll();
     return { ok: true };
   } catch (e) {
@@ -404,12 +439,17 @@ export async function archiveProduct(productId: string): Promise<ActionResult> {
 export async function releaseProduct(productId: string): Promise<ActionResult> {
   if (!hasDatabase()) return NO_DB;
   try {
-    await prisma.product.update({
-      where: { id: productId },
+    const userId = await getCurrentUserId();
+    if (!userId) return NO_AUTH;
+    const { count } = await prisma.product.updateMany({
+      where: { id: productId, userId },
       data: { releasedAt: new Date() },
     });
+    if (!count) return { ok: false, reason: "not-found" };
     // No longer something you're planning to buy — clear it from the cart.
-    await prisma.universalCartItem.deleteMany({ where: { productId } });
+    await prisma.universalCartItem.deleteMany({
+      where: { productId, cart: { userId } },
+    });
     revalidateAll();
     return { ok: true };
   } catch (e) {
@@ -424,10 +464,13 @@ export async function unreleaseProduct(
 ): Promise<ActionResult> {
   if (!hasDatabase()) return NO_DB;
   try {
-    await prisma.product.update({
-      where: { id: productId },
+    const userId = await getCurrentUserId();
+    if (!userId) return NO_AUTH;
+    const { count } = await prisma.product.updateMany({
+      where: { id: productId, userId },
       data: { releasedAt: null },
     });
+    if (!count) return { ok: false, reason: "not-found" };
     revalidateAll();
     return { ok: true };
   } catch (e) {
@@ -442,10 +485,13 @@ export async function updateNotes(
 ): Promise<ActionResult> {
   if (!hasDatabase()) return NO_DB;
   try {
-    await prisma.product.update({
-      where: { id: productId },
+    const userId = await getCurrentUserId();
+    if (!userId) return NO_AUTH;
+    const { count } = await prisma.product.updateMany({
+      where: { id: productId, userId },
       data: { notes },
     });
+    if (!count) return { ok: false, reason: "not-found" };
     revalidatePath(`/products/${productId}`);
     return { ok: true };
   } catch (e) {
@@ -461,14 +507,16 @@ export async function createCollection(
   if (!hasDatabase()) return NO_DB;
   if (!name.trim()) return { ok: false, reason: "error", message: "Name required." };
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) return NO_AUTH;
     const last = await prisma.collection.findFirst({
-      where: { userId: USER_ID },
+      where: { userId },
       orderBy: { sortOrder: "desc" },
       select: { sortOrder: true },
     });
     const created = await prisma.collection.create({
       data: {
-        userId: USER_ID,
+        userId,
         name: name.trim(),
         icon,
         sortOrder: (last?.sortOrder ?? -1) + 1,
@@ -501,8 +549,10 @@ export async function updateProduct(
 ): Promise<ActionResult> {
   if (!hasDatabase()) return NO_DB;
   try {
-    const existing = await prisma.product.findUnique({
-      where: { id: productId },
+    const userId = await getCurrentUserId();
+    if (!userId) return NO_AUTH;
+    const existing = await prisma.product.findFirst({
+      where: { id: productId, userId },
       select: {
         currentPrice: true,
         currency: true,
@@ -580,8 +630,10 @@ export async function generateGist(
 ): Promise<ActionResult<ProductGist>> {
   if (!hasDatabase()) return NO_DB;
   try {
-    const p = await prisma.product.findUnique({
-      where: { id: productId },
+    const userId = await getCurrentUserId();
+    if (!userId) return NO_AUTH;
+    const p = await prisma.product.findFirst({
+      where: { id: productId, userId },
       select: {
         title: true,
         description: true,
@@ -611,12 +663,27 @@ export async function setProductCollections(
 ): Promise<ActionResult> {
   if (!hasDatabase()) return NO_DB;
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) return NO_AUTH;
+    // The product must be the caller's, and we only attach collections they own.
+    const owned = await prisma.product.findFirst({
+      where: { id: productId, userId },
+      select: { id: true },
+    });
+    if (!owned) return { ok: false, reason: "not-found" };
+    const ownedCollections = collectionIds.length
+      ? await prisma.collection.findMany({
+          where: { id: { in: collectionIds }, userId },
+          select: { id: true },
+        })
+      : [];
+    const validIds = ownedCollections.map((c) => c.id);
     await prisma.$transaction([
       prisma.productCollection.deleteMany({ where: { productId } }),
-      ...(collectionIds.length
+      ...(validIds.length
         ? [
             prisma.productCollection.createMany({
-              data: collectionIds.map((collectionId) => ({
+              data: validIds.map((collectionId) => ({
                 productId,
                 collectionId,
               })),
@@ -637,8 +704,10 @@ export async function setProductCollections(
 export async function markAllNotificationsRead(): Promise<ActionResult> {
   if (!hasDatabase()) return NO_DB;
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) return NO_AUTH;
     await prisma.notification.updateMany({
-      where: { userId: USER_ID, read: false },
+      where: { userId, read: false },
       data: { read: true },
     });
     revalidatePath("/notifications");

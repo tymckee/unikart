@@ -15,7 +15,14 @@ import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Wordmark } from "@/components/brand/WheelLogo";
 import { CommandPasteBar } from "@/components/product/CommandPasteBar";
+import { AvatarMenu } from "./AvatarMenu";
 import { Footer } from "./Footer";
+
+interface ShellUser {
+  name: string;
+  email: string;
+  image?: string | null;
+}
 
 interface NavItem {
   href: string;
@@ -34,10 +41,13 @@ export function AppShell({
   children,
   unread = 0,
   collections = [],
+  user,
 }: {
   children: React.ReactNode;
   unread?: number;
   collections?: { id: string; name: string }[];
+  /** The signed-in user. Omitted in the public demo, which has no session. */
+  user?: ShellUser;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -110,13 +120,21 @@ export function AppShell({
             </Link>
 
             {/* Profile */}
-            <Link
-              href="/settings"
-              aria-label="Settings"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-ink text-sm font-semibold text-white transition-transform hover:scale-105"
-            >
-              T
-            </Link>
+            {user ? (
+              <AvatarMenu
+                name={user.name}
+                email={user.email}
+                image={user.image}
+              />
+            ) : (
+              <Link
+                href="/settings"
+                aria-label="Settings"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-ink text-sm font-semibold text-white transition-transform hover:scale-105"
+              >
+                T
+              </Link>
+            )}
           </div>
         </div>
       </header>

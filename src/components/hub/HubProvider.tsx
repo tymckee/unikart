@@ -25,16 +25,24 @@ interface HubContextValue {
 const HubContext = createContext<HubContextValue | null>(null);
 const STORAGE_KEY = "unikart_added_v1";
 
+// Placeholder owner id for the client-only, session-scoped store. These objects
+// live in sessionStorage and are never persisted to the DB, so the value is
+// cosmetic (it only satisfies the ProductView type). The real owner id is
+// passed in by the authenticated (app) layout; the public /demo uses the
+// default so it works without an account.
+const DEMO_USER_ID = "demo";
+
 function previewToProductView(
   preview: ParsePreview,
   opts: SaveOptions,
   id: string,
   now: string,
+  userId: string,
 ): ProductView {
   const collection = mockCollections.find((c) => c.id === opts.collectionId);
   return {
     id,
-    userId: "user_1",
+    userId,
     title: preview.title,
     description: preview.description,
     originalUrl: preview.originalUrl,
@@ -78,7 +86,7 @@ function previewToProductView(
         ? {
             id: `${id}-alert`,
             productId: id,
-            userId: "user_1",
+            userId,
             type: opts.targetPrice ? "target_price" : "price_drop",
             targetPrice: opts.targetPrice ?? null,
             enabled: true,
@@ -93,9 +101,20 @@ function previewToProductView(
 /**
  * Session-scoped store for products saved during a visit. Backed by
  * sessionStorage so a save on the landing page survives navigation to
- * the Hub. Replaced by Prisma persistence in Phase 2.
+ * the Hub. Used in-memory by the public /demo (no account) and as a
+ * client-side overlay in the authenticated app.
+ *
+ * `userId` is the owner stamped onto the synthetic ProductViews. The
+ * authenticated (app) layout passes the real session id; /demo omits it and
+ * falls back to a demo placeholder.
  */
-export function HubProvider({ children }: { children: React.ReactNode }) {
+export function HubProvider({
+  children,
+  userId = DEMO_USER_ID,
+}: {
+  children: React.ReactNode;
+  userId?: string;
+}) {
   const [added, setAdded] = useState<ProductView[]>([]);
 
   useEffect(() => {
@@ -123,6 +142,7 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
         opts,
         id,
         new Date().toISOString(),
+        userId,
       );
       setAdded((prev) => {
         const next = [view, ...prev];
@@ -135,7 +155,7 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
       });
       return view;
     },
-    [],
+    [userId],
   );
 
   return (

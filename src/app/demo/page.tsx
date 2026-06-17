@@ -2,22 +2,26 @@ import type { Metadata } from "next";
 import { Sparkles } from "lucide-react";
 import { HubView } from "@/components/hub/HubView";
 import {
-  getBackInStockIds,
   getCartView,
   getCollectionsWithCounts,
   getProductViews,
-} from "@/lib/data";
+  mockNotifications,
+} from "@/lib/mock-data";
 
 export const metadata: Metadata = { title: "Demo" };
-export const dynamic = "force-dynamic";
 
-export default async function DemoPage() {
-  const [products, cart, backInStockIds, collections] = await Promise.all([
-    getProductViews(),
-    getCartView(),
-    getBackInStockIds(),
-    getCollectionsWithCounts(),
-  ]);
+/**
+ * Public demo. Reads straight from the in-memory mock selectors (seeded user_1
+ * data) rather than the session-scoped data layer, so it renders the same rich
+ * sample Hub for everyone — no account, no database required.
+ */
+export default function DemoPage() {
+  const products = getProductViews();
+  const cart = getCartView();
+  const collections = getCollectionsWithCounts();
+  const backInStockIds = mockNotifications
+    .filter((n) => n.type === "back_in_stock" && n.productId)
+    .map((n) => n.productId as string);
 
   return (
     <div className="space-y-5">

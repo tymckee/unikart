@@ -6,6 +6,15 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Lightweight email validity check for the sign-in form. Lives in client-safe
+ * utils (not auth-helpers, which imports next/headers) so Client Components can
+ * use it without pulling server-only auth code into the browser bundle.
+ */
+export function looksLikeEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 /** Format a number as currency. Falls back gracefully for unknown codes. */
 export function formatPrice(
   amount: number | null | undefined,

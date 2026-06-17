@@ -9,6 +9,7 @@ import {
   TrendingDown,
 } from "lucide-react";
 import { getProductView } from "@/lib/mock-data";
+import { getCurrentUser } from "@/lib/auth-helpers";
 import { buyBrain } from "@/lib/buy-brain";
 import { formatPrice } from "@/lib/utils";
 import { Wordmark, WheelLogo } from "@/components/brand/WheelLogo";
@@ -23,9 +24,19 @@ import { PriceHistoryChart } from "@/components/product/PriceHistoryChart";
 import { BuyBrainPanel } from "@/components/product/BuyBrainPanel";
 import { Footer } from "@/components/layout/Footer";
 
-export default function LandingPage() {
+// The CTAs adapt to auth state (getCurrentUser reads request headers), so the
+// landing page is rendered per-request rather than prerendered statically.
+export const dynamic = "force-dynamic";
+
+export default async function LandingPage() {
   const sample = getProductView("p_sony_xm5")!;
   const brain = buyBrain(sample, sample.priceHistory, sample.alert?.targetPrice);
+
+  // Tailor the calls-to-action to auth state: signed-in visitors go straight
+  // to their Hub; everyone else is routed into sign-up (start) or sign-in.
+  const user = await getCurrentUser();
+  const startHref = user ? "/dashboard" : "/sign-up";
+  const openHref = user ? "/dashboard" : "/sign-in";
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -35,14 +46,16 @@ export default function LandingPage() {
           <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-5">
             <Wordmark />
             <div className="flex items-center gap-2">
-              <Link
-                href="/sign-in"
-                className="hidden rounded-full px-4 py-2 text-sm font-medium text-slate transition-colors hover:text-ink sm:block"
-              >
-                Sign in
-              </Link>
-              <Button href="/dashboard" size="sm">
-                Open UniKart
+              {!user && (
+                <Link
+                  href="/sign-in"
+                  className="hidden rounded-full px-4 py-2 text-sm font-medium text-slate transition-colors hover:text-ink sm:block"
+                >
+                  Sign in
+                </Link>
+              )}
+              <Button href={openHref} size="sm">
+                {user ? "Open UniKart" : "Get started"}
               </Button>
             </div>
           </div>
@@ -81,7 +94,7 @@ export default function LandingPage() {
                 <CommandPasteBar variant="hero" redirectAfterSave="/dashboard" />
               </HubProvider>
               <div className="mt-5 flex items-center justify-center gap-3">
-                <Button href="/dashboard">
+                <Button href={startHref}>
                   Start your calm cart <ArrowRight size={16} />
                 </Button>
                 <Button href="/demo" variant="secondary">
@@ -219,8 +232,9 @@ export default function LandingPage() {
               and track.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <Button href="/dashboard" size="lg">
-                Open UniKart <ArrowRight size={18} />
+              <Button href={startHref} size="lg">
+                {user ? "Open UniKart" : "Start your calm cart"}{" "}
+                <ArrowRight size={18} />
               </Button>
               <Button href="/demo" size="lg" variant="secondary">
                 Try the demo

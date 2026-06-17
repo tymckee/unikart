@@ -15,10 +15,12 @@ import type { NotificationType } from "../types";
  *
  * `runPriceStockCheck` is kept for the manual "Run check now" path: in dev it
  * scrapes each tracked product inline; with no real price it records a check
- * without a fabricated price.
+ * without a fabricated price. It's scoped to a single user (the caller).
+ *
+ * Notifications are always addressed to the PRODUCT's owner (read off the row),
+ * never a hardcoded user — so a price/stock change notifies whoever saved it.
+ * This keeps the scheduled, cross-user sweep correct as well.
  */
-
-const USER_ID = "user_1";
 
 export interface Job<T> {
   name: string;
@@ -44,6 +46,7 @@ interface NotificationDraft {
 function buildNotifications(
   product: {
     id: string;
+    userId: string;
     title: string;
     currency: string;
   },
@@ -54,7 +57,8 @@ function buildNotifications(
   alert: { type: string; targetPrice: number | null; enabled: boolean } | null,
 ): NotificationDraft[] {
   const out: NotificationDraft[] = [];
-  const base = { userId: USER_ID, productId: product.id };
+  // Address notifications to the product's owner — never a hardcoded user.
+  const base = { userId: product.userId, productId: product.id };
   const cur = (n: number) => formatPrice(n, product.currency);
 
   if (newPrice != null && oldPrice != null && Math.abs(newPrice - oldPrice) > 0.001) {
@@ -223,10 +227,13 @@ export async function applyPriceCheck(
  * fetchLivePrice (real data; dev-simulated only when no SCRAPERAPI_KEY in
  * non-prod) and apply via applyPriceCheck. Bounded so it can't run unbounded.
  */
-export async function runPriceStockCheck(limit = 40): Promise<CheckSummary> {
+export async function runPriceStockCheck(
+  limit = 40,
+  userId?: string,
+): Promise<CheckSummary> {
   const products = await prisma.product.findMany({
     where: {
-      userId: USER_ID,
+      ...(userId ? { userId } : {}),
       isArchived: false,
       isPurchased: false,
       releasedAt: null,

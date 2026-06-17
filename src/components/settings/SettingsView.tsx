@@ -1,32 +1,53 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Check, Download, LogOut, Trash2 } from "lucide-react";
+import { Check, Download, LogOut } from "lucide-react";
 import {
   getCollectionsWithCounts,
   getProductViews,
   mockNotifications,
-  mockUser,
 } from "@/lib/mock-data";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/Switch";
 import { Pill } from "@/components/ui/Pill";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { useSignOut } from "@/components/auth/use-sign-out";
 import { SettingsSection, SettingsRow } from "./SettingsSection";
+import { AccountCard } from "./AccountCard";
+import { PasskeysManager } from "./PasskeysManager";
+import { ChangePasswordCard } from "./ChangePasswordCard";
+import { SessionsManager } from "./SessionsManager";
+import { DeleteAccountCard } from "./DeleteAccountCard";
 
-export function SettingsView() {
-  const router = useRouter();
+interface InitialUser {
+  id: string;
+  name: string;
+  email: string;
+  image?: string | null;
+  plan: "free" | "pro";
+}
+
+export function SettingsView({
+  initialUser,
+}: {
+  initialUser: InitialUser | null;
+}) {
+  const { signOut, pending: signingOut } = useSignOut();
   const [frequency, setFrequency] = useState("daily");
   const [watchOnSave, setWatchOnSave] = useState(true);
   const [quietHours, setQuietHours] = useState(true);
   const [affiliate, setAffiliate] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
+  const flash = (msg: string) => {
+    setNote(msg);
+    setTimeout(() => setNote(null), 3500);
+  };
+
   const exportData = () => {
     const payload = {
       exportedAt: new Date().toISOString(),
-      user: mockUser,
+      user: initialUser,
       collections: getCollectionsWithCounts(),
       products: getProductViews(),
       notifications: mockNotifications,
@@ -43,40 +64,38 @@ export function SettingsView() {
     flash("Your data export has downloaded.");
   };
 
-  const flash = (msg: string) => {
-    setNote(msg);
-    setTimeout(() => setNote(null), 3500);
-  };
-
-  const confirmDanger = (label: string) => {
-    if (
-      window.confirm(
-        `${label}\n\nThis is a preview build — no real data will be changed.`,
-      )
-    ) {
-      flash(`${label} — preview only, nothing was changed.`);
-    }
-  };
-
   return (
     <div className="space-y-8">
       {/* Account */}
-      <SettingsSection title="Account">
-        <SettingsRow
-          label={mockUser.name}
-          description={mockUser.email}
-          control={<Pill tone="ink">Pro</Pill>}
-        />
-        <SettingsRow
-          label="Sign out"
-          description="End your session on this device."
-          control={
-            <Button variant="ghost" size="sm" onClick={() => router.push("/")}>
-              <LogOut size={15} /> Sign out
-            </Button>
-          }
-        />
-      </SettingsSection>
+      {initialUser && <AccountCard initialUser={initialUser} onNotify={flash} />}
+
+      {/* Security */}
+      <div className="space-y-6">
+        <PasskeysManager onNotify={flash} />
+
+        <SettingsSection
+          title="Security"
+          description="Keep access to your account in your hands."
+        >
+          <ChangePasswordCard onNotify={flash} />
+          <SettingsRow
+            label="Sign out"
+            description="End your session on this device."
+            control={
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={signOut}
+                loading={signingOut}
+              >
+                {!signingOut && <LogOut size={15} />} Sign out
+              </Button>
+            }
+          />
+        </SettingsSection>
+
+        <SessionsManager onNotify={flash} />
+      </div>
 
       {/* Plan */}
       <SettingsSection
@@ -87,6 +106,7 @@ export function SettingsView() {
           <PlanCard
             name="Free"
             price="$0"
+            current={initialUser?.plan !== "pro"}
             features={[
               "Save unlimited products",
               "Basic collections",
@@ -96,7 +116,7 @@ export function SettingsView() {
           <PlanCard
             name="Pro"
             price="$4/mo"
-            current
+            current={initialUser?.plan === "pro"}
             features={[
               "Automatic price & stock tracking",
               "Unlimited alerts",
@@ -107,8 +127,8 @@ export function SettingsView() {
         </div>
       </SettingsSection>
 
-      {/* Alerts */}
-      <SettingsSection title="Alerts">
+      {/* Alerts / Notifications */}
+      <SettingsSection title="Notifications">
         <SettingsRow
           label="Alert frequency"
           description="How often we check the things you're watching."
@@ -154,32 +174,6 @@ export function SettingsView() {
             </Button>
           }
         />
-        <SettingsRow
-          label="Delete product history"
-          description="Clear saved price and stock snapshots."
-          control={
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => confirmDanger("Delete product history")}
-            >
-              Clear
-            </Button>
-          }
-        />
-        <SettingsRow
-          label="Delete account"
-          description="Permanently remove your account and all data."
-          control={
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => confirmDanger("Delete account")}
-            >
-              <Trash2 size={15} /> Delete
-            </Button>
-          }
-        />
       </SettingsSection>
 
       {/* Affiliate disclosure */}
@@ -205,6 +199,14 @@ export function SettingsView() {
           description="You can opt out at any time."
           control={<Switch checked={affiliate} onCheckedChange={setAffiliate} />}
         />
+      </SettingsSection>
+
+      {/* Danger zone */}
+      <SettingsSection
+        title="Danger zone"
+        description="Irreversible actions. Please be sure before you continue."
+      >
+        <DeleteAccountCard />
       </SettingsSection>
 
       {note && (

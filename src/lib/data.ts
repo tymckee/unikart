@@ -1,5 +1,6 @@
 import type { Prisma } from "@/generated/prisma";
 import { hasDatabase, prisma } from "./db";
+import { getCurrentUserId } from "./auth-helpers";
 import * as mock from "./mock-data";
 import type {
   AlertRule,
@@ -23,9 +24,14 @@ import type {
  * configured and otherwise falls back to the mock selectors, so the app
  * renders with or without a DATABASE_URL. Swapping SQLite → Postgres needs
  * no changes here.
+ *
+ * Every Prisma-backed selector is scoped to the authenticated user
+ * (`getCurrentUserId`). When there's no session the selector returns empty —
+ * the (app) route group redirects unauthenticated visitors before these run,
+ * so an empty result is just a safe backstop. The mock fallback (no
+ * DATABASE_URL) is intentionally unscoped: it powers the public /demo, which
+ * works without an account.
  */
-
-const USER_ID = "user_1";
 
 const iso = (d: Date): string => d.toISOString();
 const isoN = (d: Date | null): string | null => (d ? d.toISOString() : null);
@@ -117,9 +123,9 @@ function mapProduct(p: ProductWithRelations, cartIds: Set<string>): ProductView 
   };
 }
 
-async function activeCartProductIds(): Promise<Set<string>> {
+async function activeCartProductIds(userId: string): Promise<Set<string>> {
   const cart = await prisma.universalCart.findFirst({
-    where: { userId: USER_ID, status: "active" },
+    where: { userId, status: "active" },
     include: { items: { select: { productId: true } } },
   });
   return new Set(cart?.items.map((i) => i.productId) ?? []);
@@ -128,9 +134,11 @@ async function activeCartProductIds(): Promise<Set<string>> {
 export async function getProductViews(): Promise<ProductView[]> {
   if (!hasDatabase()) return mock.getProductViews();
   try {
-    const cartIds = await activeCartProductIds();
+    const userId = await getCurrentUserId();
+    if (!userId) return [];
+    const cartIds = await activeCartProductIds(userId);
     const products = await prisma.product.findMany({
-      where: { userId: USER_ID },
+      where: { userId },
       include: productInclude,
       orderBy: { createdAt: "desc" },
     });
@@ -146,12 +154,15 @@ export async function getProductView(
 ): Promise<ProductView | undefined> {
   if (!hasDatabase()) return mock.getProductView(id);
   try {
-    const p = await prisma.product.findUnique({
-      where: { id },
+    const userId = await getCurrentUserId();
+    if (!userId) return undefined;
+    // Scope to the owner: a user can only ever load their own product.
+    const p = await prisma.product.findFirst({
+      where: { id, userId },
       include: productInclude,
     });
     if (!p) return undefined;
-    const cartIds = await activeCartProductIds();
+    const cartIds = await activeCartProductIds(userId);
     return mapProduct(p, cartIds);
   } catch (e) {
     console.error("[data] getProductView fell back to mock:", e);
@@ -162,8 +173,10 @@ export async function getProductView(
 export async function getCollectionsWithCounts() {
   if (!hasDatabase()) return mock.getCollectionsWithCounts();
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) return [];
     const cols = await prisma.collection.findMany({
-      where: { userId: USER_ID },
+      where: { userId },
       orderBy: { sortOrder: "asc" },
       include: { _count: { select: { products: true } } },
     });
@@ -228,23 +241,27 @@ function computeSteps(
   }));
 }
 
+function emptyCartView(userId: string) {
+  const placeholder: UniversalCart = {
+    id: "cart_empty",
+    userId,
+    name: "Universal Cart",
+    status: "active",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  return { cart: placeholder, items: [], steps: [], total: 0 };
+}
+
 export async function getCartView() {
   if (!hasDatabase()) return mock.getCartView();
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) return emptyCartView("");
     const cart = await prisma.universalCart.findFirst({
-      where: { userId: USER_ID, status: "active" },
+      where: { userId, status: "active" },
     });
-    if (!cart) {
-      const placeholder: UniversalCart = {
-        id: "cart_empty",
-        userId: USER_ID,
-        name: "Universal Cart",
-        status: "active",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      return { cart: placeholder, items: [], steps: [], total: 0 };
-    }
+    if (!cart) return emptyCartView(userId);
     const items = await prisma.universalCartItem.findMany({
       where: { cartId: cart.id },
       include: { product: { include: productInclude } },
@@ -274,8 +291,10 @@ export async function getCartView() {
 export async function getNotifications(): Promise<Notification[]> {
   if (!hasDatabase()) return mock.mockNotifications;
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) return [];
     const rows = await prisma.notification.findMany({
-      where: { userId: USER_ID },
+      where: { userId },
       orderBy: { createdAt: "desc" },
     });
     return rows.map((n) => ({
@@ -298,8 +317,10 @@ export async function getNotifications(): Promise<Notification[]> {
 export async function getUnreadCount(): Promise<number> {
   if (!hasDatabase()) return mock.getUnreadCount();
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) return 0;
     return await prisma.notification.count({
-      where: { userId: USER_ID, read: false },
+      where: { userId, read: false },
     });
   } catch (e) {
     console.error("[data] getUnreadCount fell back to mock:", e);

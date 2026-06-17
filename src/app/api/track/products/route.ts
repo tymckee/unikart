@@ -2,7 +2,6 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { hasDatabase, prisma } from "@/lib/db";
 
-const USER_ID = "user_1";
 const MAX_PRODUCTS = 40;
 
 function authorized(header: string | null, secret: string): boolean {
@@ -23,6 +22,10 @@ export const dynamic = "force-dynamic";
  *
  * Returns up to 40 active products (not archived/purchased/released), oldest-
  * checked first (nulls first), so each run advances the staleness frontier.
+ *
+ * Product-scoped, not session-scoped: the sweep spans every user's products so
+ * each owner's tracking keeps running. The apply step addresses any resulting
+ * notification to the product's owner (see jobs/price-stock buildNotifications).
  */
 export async function GET(req: Request): Promise<Response> {
   const secret = process.env.CRON_SECRET;
@@ -44,7 +47,6 @@ export async function GET(req: Request): Promise<Response> {
 
   const products = await prisma.product.findMany({
     where: {
-      userId: USER_ID,
       isArchived: false,
       isPurchased: false,
       releasedAt: null,
