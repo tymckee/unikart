@@ -14,9 +14,9 @@
 
 [build.environment]
   NODE_VERSION = "20"
-  # @imgly/background-removal-node (+ native onnxruntime, ~133MB) is an
-  # optionalDependency used only by the LOCAL-DEV cutout path. Skip optional
-  # deps in the production build — cutout.ts dynamic-imports it behind a
-  # try/catch and no-ops when absent. Keeps it installed locally (optional
-  # deps install by default) without bloating every Netlify build.
-  NPM_FLAGS = "--omit=optional"
+  # NOTE: do NOT set NPM_FLAGS="--omit=optional" here. It looks tempting to skip
+  # the dev-only @imgly/background-removal-node (+ ~133MB onnxruntime), but it
+  # ALSO strips lightningcss's native binary, which Tailwind v4 requires — the
+  # CSS compile then fails ("Cannot find module ...lightningcss.*.node"). imgly
+  # is a harmless no-op in prod (cutout.ts returns null when NODE_ENV=production),
+  # so just let optional deps install.
