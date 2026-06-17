@@ -7,9 +7,17 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: import.meta.dirname,
   },
-  // Keep the heavy, native, local-only background-removal deps out of the
-  // bundle/trace (they only run in dev; the cutout code dynamically imports them).
-  serverExternalPackages: ["@imgly/background-removal-node", "onnxruntime-node"],
+  // Keep heavy/native server-only deps out of the bundle/trace:
+  //  - imgly/onnxruntime: local-only background removal (dynamically imported).
+  //  - prisma: the generated client + native query engine must be require()'d at
+  //    runtime, not bundled — its createRequire usage otherwise trips the bundler
+  //    and Netlify functions can't find the engine.
+  serverExternalPackages: [
+    "@imgly/background-removal-node",
+    "onnxruntime-node",
+    "@prisma/client",
+    "prisma",
+  ],
 };
 
 export default nextConfig;

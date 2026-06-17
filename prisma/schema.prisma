@@ -8,8 +8,13 @@
 // data-access layer.
 
 generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/prisma"
+  provider      = "prisma-client-js"
+  output        = "../src/generated/prisma"
+  // "native" for local dev; "rhel-openssl-3.0.x" for Netlify's Linux runtime
+  // (Node 20 / OpenSSL 3). Without it, deployed functions fail at runtime with
+  // "could not locate the Query Engine for runtime rhel-openssl-3.0.x" once we
+  // move off mock data to Postgres. Harmless while still on SQLite.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
