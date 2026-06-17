@@ -1,0 +1,337 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Check, Link2, Sparkles } from "lucide-react";
+import { cn, formatPrice, looksLikeUrl, prettyDomain } from "@/lib/utils";
+import { simulateParse, type ParsePreview } from "@/lib/parse-preview";
+import { mockCollections } from "@/lib/mock-data";
+import { useHub } from "@/components/hub/HubProvider";
+import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
+import { WheelSpinner } from "@/components/brand/WheelLoader";
+import { ProductTile } from "./ProductTile";
+import { StockBadge, ConfidenceMeter } from "./StockBadge";
+
+type Status = "idle" | "parsing" | "saving" | "saved";
+
+interface CommandPasteBarProps {
+  variant?: "hero" | "bar";
+  autoFocus?: boolean;
+  className?: string;
+  /** Where to go after a successful save. Defaults to staying put. */
+  redirectAfterSave?: string;
+}
+
+export function CommandPasteBar({
+  variant = "bar",
+  autoFocus = false,
+  className,
+  redirectAfterSave,
+}: CommandPasteBarProps) {
+  const router = useRouter();
+  const hub = useHub();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const [value, setValue] = useState("");
+  const [status, setStatus] = useState<Status>("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<ParsePreview | null>(null);
+
+  // Save options
+  const [collectionId, setCollectionId] = useState(mockCollections[0].id);
+  const [watch, setWatch] = useState(true);
+  const [target, setTarget] = useState("");
+
+  const later = (fn: () => void, ms: number) => {
+    const t = setTimeout(fn, ms);
+    timers.current.push(t);
+  };
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!looksLikeUrl(value)) {
+      setError("That doesn't look like a product link yet.");
+      return;
+    }
+    setError(null);
+    setStatus("parsing");
+    later(() => {
+      setPreview(simulateParse(value));
+      setStatus("idle");
+    }, 1500);
+  }
+
+  function reset() {
+    setPreview(null);
+    setStatus("idle");
+    setValue("");
+    setTarget("");
+    setWatch(true);
+    setCollectionId(mockCollections[0].id);
+  }
+
+  function handleSave() {
+    if (!preview) return;
+    setStatus("saving");
+    later(() => {
+      hub?.add(preview, {
+        collectionId,
+        watch,
+        targetPrice: target ? Number(target) : null,
+      });
+      setStatus("saved");
+      later(() => {
+        reset();
+        if (redirectAfterSave) router.push(redirectAfterSave);
+      }, 1500);
+    }, 850);
+  }
+
+  const isHero = variant === "hero";
+  const parsingDomain = value ? prettyDomain(value) : "the page";
+
+  return (
+    <div className={cn("w-full", className)}>
+      {status === "parsing" ? (
+        <div
+          className={cn(
+            "flex items-center justify-center rounded-full border border-line bg-white shadow-soft",
+            isHero ? "h-16 px-6" : "h-12 px-5",
+          )}
+        >
+          <div className="flex items-center gap-3 text-slate">
+            <WheelSpinner size={isHero ? 24 : 18} className="text-accent" />
+            <span className={cn(isHero ? "text-base" : "text-sm")}>
+              Reading {parsingDomain}…
+            </span>
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="w-full">
+          <div
+            className={cn(
+              "group flex items-center gap-2 rounded-full border bg-white shadow-soft transition-all",
+              error
+                ? "border-up/50 ring-4 ring-up/10"
+                : "border-line focus-within:border-accent/60 focus-within:ring-4 focus-within:ring-accent/10",
+              isHero ? "h-16 pl-6 pr-2" : "h-12 pl-4 pr-1.5",
+            )}
+          >
+            <Link2
+              size={isHero ? 22 : 18}
+              className="shrink-0 text-silver"
+              aria-hidden="true"
+            />
+            <input
+              ref={inputRef}
+              autoFocus={autoFocus}
+              id="unikart-paste"
+              value={value}
+              onChange={(e) => {
+                setValue(e.target.value);
+                if (error) setError(null);
+              }}
+              inputMode="url"
+              placeholder="Paste a product link"
+              aria-label="Paste a product link"
+              className={cn(
+                "min-w-0 flex-1 bg-transparent text-ink placeholder:text-silver focus:outline-none",
+                isHero ? "text-lg" : "text-sm",
+              )}
+            />
+            <Button
+              type="submit"
+              size={isHero ? "md" : "sm"}
+              className="shrink-0"
+              disabled={!value}
+            >
+              <span className={isHero ? "" : "hidden sm:inline"}>Save</span>
+              <ArrowRight size={isHero ? 18 : 16} />
+            </Button>
+          </div>
+        </form>
+      )}
+
+      {error && (
+        <p className="mt-2 pl-4 text-xs text-up animate-fade">{error}</p>
+      )}
+      {isHero && !error && (
+        <p className="mt-3 text-center text-sm text-slate">
+          Works with most online stores. We never ask for store logins.
+        </p>
+      )}
+
+      {/* Parse preview / save sheet */}
+      <Modal
+        open={Boolean(preview)}
+        onClose={() => status !== "saving" && reset()}
+        hideClose={status === "saved"}
+        title={status === "saved" ? undefined : "Save to UniKart"}
+        description={
+          status === "saved"
+            ? undefined
+            : "Confirm the details, choose a collection, and set an alert."
+        }
+      >
+        {preview && status === "saved" ? (
+          <div className="flex flex-col items-center px-6 py-12 text-center">
+            <div className="relative mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-down-soft text-down">
+              <Check size={30} strokeWidth={2.5} />
+            </div>
+            <h3 className="text-lg font-semibold text-ink">Saved to your Hub</h3>
+            <p className="mt-1.5 max-w-xs text-sm text-slate">
+              {preview.title} is now being watched. We&apos;ll track price and
+              stock for you.
+            </p>
+          </div>
+        ) : preview ? (
+          <div className="space-y-5 px-6 pb-6 pt-5">
+            {/* Preview card */}
+            <div className="flex gap-4 rounded-2xl border border-line bg-white/60 p-3">
+              <ProductTile
+                category={preview.category}
+                title={preview.title}
+                className="h-24 w-24 shrink-0 rounded-xl"
+                iconSize={32}
+                watermark={false}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="line-clamp-2 text-sm font-semibold text-ink">
+                  {preview.title}
+                </p>
+                <div className="mt-1 flex items-center gap-2 text-xs text-slate">
+                  <span className="truncate">{preview.storeDomain}</span>
+                  <ConfidenceMeter confidence={preview.confidence} />
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-base font-semibold text-ink">
+                    {formatPrice(preview.price, preview.currency)}
+                  </span>
+                  <StockBadge availability={preview.availability} />
+                </div>
+              </div>
+            </div>
+
+            {/* Collection */}
+            <Field label="Collection">
+              <div className="relative">
+                <select
+                  value={collectionId}
+                  onChange={(e) => setCollectionId(e.target.value)}
+                  className="h-11 w-full appearance-none rounded-xl border border-line bg-white px-4 pr-9 text-sm text-ink shadow-soft focus:border-accent/60 focus:outline-none focus:ring-4 focus:ring-accent/10"
+                >
+                  {mockCollections.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <ArrowRight
+                  size={14}
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-silver"
+                />
+              </div>
+            </Field>
+
+            {/* Alert */}
+            <Field label="Price alert">
+              <button
+                type="button"
+                onClick={() => setWatch((v) => !v)}
+                className="flex w-full items-center justify-between rounded-xl border border-line bg-white px-4 py-3 text-left shadow-soft transition-colors hover:bg-canvas"
+              >
+                <span className="text-sm text-ink">
+                  Watch for price drops & stock
+                </span>
+                <Switch on={watch} />
+              </button>
+              {watch && (
+                <div className="mt-2 flex items-center gap-2 rounded-xl border border-line bg-white px-4 shadow-soft">
+                  <span className="text-sm text-slate">Target</span>
+                  <input
+                    value={target}
+                    onChange={(e) =>
+                      setTarget(e.target.value.replace(/[^0-9.]/g, ""))
+                    }
+                    inputMode="decimal"
+                    placeholder={`Optional · e.g. ${Math.floor(
+                      preview.price * 0.9,
+                    )}`}
+                    className="h-11 flex-1 bg-transparent text-sm text-ink placeholder:text-silver focus:outline-none"
+                  />
+                </div>
+              )}
+            </Field>
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-1">
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={reset}
+                type="button"
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleSave}
+                loading={status === "saving"}
+                type="button"
+              >
+                {status === "saving" ? "Saving…" : "Save product"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs font-medium text-slate">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function Switch({ on }: { on: boolean }) {
+  return (
+    <span
+      className={cn(
+        "relative inline-flex h-6 w-10 items-center rounded-full transition-colors",
+        on ? "bg-accent" : "bg-fog",
+      )}
+    >
+      <span
+        className={cn(
+          "absolute h-5 w-5 rounded-full bg-white shadow-soft transition-transform",
+          on ? "translate-x-4" : "translate-x-0.5",
+        )}
+      />
+    </span>
+  );
+}
+
+/** Decorative hint chip used near the hero paste bar. */
+export function PasteHint() {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white/60 px-3 py-1 text-xs text-slate">
+      <Sparkles size={13} className="text-accent" />
+      Paste from Amazon, Apple, Shopify stores & more
+    </span>
+  );
+}

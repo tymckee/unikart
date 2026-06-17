@@ -1,0 +1,13 @@
+# UniCart — Netlify configuration
+# Netlify auto-detects Next.js and installs @netlify/plugin-nextjs, which
+# handles the App Router, server components, and dynamic routes. Connect this
+# repo in your PERSONAL Netlify account.
+
+[build]
+  command = "npm run build"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[build.environment]
+  NODE_VERSION = "20"
