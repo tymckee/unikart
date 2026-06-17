@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { hasDatabase, prisma } from "./db";
 import { parseProduct } from "./parser";
+import { getCutout } from "./cutout";
 import { runPriceStockCheck } from "./jobs/price-stock";
 import type { ParsePreview } from "./parse-preview";
 import type { Availability, MetadataConfidence } from "./types";
@@ -148,6 +149,21 @@ export async function saveProduct(
         await prisma.productCollection
           .create({ data: { productId: product.id, collectionId: col.id } })
           .catch(() => {});
+      }
+    }
+
+    // Best-effort AI background-removal (no-op until a provider is configured).
+    if (input.imageUrl) {
+      try {
+        const cutout = await getCutout(input.imageUrl);
+        if (cutout) {
+          await prisma.product.update({
+            where: { id: product.id },
+            data: { cutoutUrl: cutout },
+          });
+        }
+      } catch (e) {
+        console.error("[action] cutout:", e);
       }
     }
 

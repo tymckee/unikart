@@ -103,6 +103,8 @@ export interface Product {
   originalUrl: string;
   canonicalUrl?: string | null;
   imageUrl?: string | null;
+  /** Background-removed product shot (AI). Preferred on cards when present. */
+  cutoutUrl?: string | null;
   storeName: string;
   storeDomain: string;
   brand?: string | null;

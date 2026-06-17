@@ -88,6 +88,7 @@ function mapProduct(p: ProductWithRelations, cartIds: Set<string>): ProductView 
     originalUrl: p.originalUrl,
     canonicalUrl: p.canonicalUrl,
     imageUrl: p.imageUrl,
+    cutoutUrl: p.cutoutUrl,
     storeName: p.storeName,
     storeDomain: p.storeDomain,
     brand: p.brand,
