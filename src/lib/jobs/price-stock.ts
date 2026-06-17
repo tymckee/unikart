@@ -1,18 +1,21 @@
 import { prisma } from "../db";
+import { Prisma } from "../../generated/prisma";
 import { formatPrice } from "../utils";
-import type { Availability, NotificationType } from "../types";
+import { fetchLivePrice } from "../track-compute";
+import type { NotificationType } from "../types";
 
 /**
  * Price & stock tracking job.
  *
- * MVP uses a simulated "market" so the demo produces movement on demand. The
- * real implementation would replace `simulateMarketChange` with a re-parse of
- * the product page (src/lib/parser) — everything downstream (snapshots, product
- * update, alert evaluation, notifications) stays the same.
+ * The live data SOURCE is a real scrape: the scheduled Netlify function calls
+ * fetchLivePrice (src/lib/track-compute.ts, Prisma-free) and POSTs the result
+ * to /api/track/apply, which calls applyPriceCheck below. The per-product apply
+ * logic (snapshots, product update, alert evaluation, notifications) is shared:
+ * both that route and the manual `runPriceStockCheck` path call applyPriceCheck.
  *
- * Trigger it manually via the `runPriceCheckNow` server action, or on a
- * schedule via POST /api/jobs/price-check (see that route). This is the seam a
- * real cron/queue plugs into.
+ * `runPriceStockCheck` is kept for the manual "Run check now" path: in dev it
+ * scrapes each tracked product inline; with no real price it records a check
+ * without a fabricated price.
  */
 
 const USER_ID = "user_1";
@@ -35,45 +38,6 @@ interface NotificationDraft {
   type: NotificationType;
   title: string;
   body: string;
-}
-
-type MarketProduct = {
-  currentPrice: number | null;
-  lowestPrice: number | null;
-  availability: string;
-};
-
-/** Stand-in "market": a bounded random walk. Replace with a live re-parse. */
-function simulateMarketChange(p: MarketProduct): {
-  price: number | null;
-  availability: Availability;
-} {
-  let price = p.currentPrice;
-  if (price != null) {
-    const r = Math.random();
-    if (r < 0.42) {
-      const pct = 0.01 + Math.random() * 0.11; // drop 1–12%
-      const floor = p.lowestPrice ?? price * 0.5;
-      price = Math.max(floor, Math.round(price * (1 - pct) * 100) / 100);
-    } else if (r < 0.67) {
-      const pct = 0.01 + Math.random() * 0.07; // rise 1–8%
-      price = Math.round(price * (1 + pct) * 100) / 100;
-    }
-  }
-
-  let availability = p.availability as Availability;
-  const a = Math.random();
-  if (p.availability === "out_of_stock") {
-    if (a < 0.5) availability = "in_stock";
-  } else if (p.availability === "low_stock") {
-    if (a < 0.3) availability = "in_stock";
-    else if (a < 0.4) availability = "out_of_stock";
-  } else if (p.availability === "in_stock") {
-    if (a < 0.06) availability = "low_stock";
-    else if (a < 0.09) availability = "out_of_stock";
-  }
-
-  return { price, availability };
 }
 
 /** Change-based notifications (only fire on an actual change/crossing). */
@@ -151,91 +115,144 @@ function buildNotifications(
   return out;
 }
 
-export async function runPriceStockCheck(): Promise<CheckSummary> {
-  const products = await prisma.product.findMany({
-    where: { userId: USER_ID, isArchived: false, isPurchased: false },
+export interface ApplyResult {
+  priceChanged: boolean;
+  stockChanged: boolean;
+  notifications: number;
+}
+
+/**
+ * Record one product's check result (Prisma). Shared by the scheduled apply
+ * route and the manual `runPriceStockCheck`. Records the snapshot(s), updates
+ * previousPrice/current/lowest/highest + availability + lastCheckedAt, and
+ * creates change-based notifications. When `next.price` is null we still update
+ * lastCheckedAt + availability (and record a stock snapshot) but skip the price
+ * snapshot — we never invent a number.
+ *
+ * Each product's writes are atomic: they fully apply or roll back, so a failure
+ * can't leave a product half-updated.
+ */
+export async function applyPriceCheck(
+  productId: string,
+  next: { price: number | null; availability: string },
+): Promise<ApplyResult> {
+  const p = await prisma.product.findUnique({
+    where: { id: productId },
     include: { alerts: { where: { enabled: true }, orderBy: { updatedAt: "desc" } } },
   });
+  if (!p) return { priceChanged: false, stockChanged: false, notifications: 0 };
 
   const now = new Date();
-  let priceChanges = 0;
-  let stockChanges = 0;
-  const drafts: NotificationDraft[] = [];
+  const price = next.price;
+  const availability = next.availability || p.availability;
+  const oldPrice = p.currentPrice;
+  const oldAvail = p.availability;
+  const priceChanged =
+    price != null && oldPrice != null && Math.abs(price - oldPrice) > 0.001;
+  const availChanged = availability !== oldAvail;
 
-  for (const p of products) {
-    const { price, availability } = simulateMarketChange(p);
-    const oldPrice = p.currentPrice;
-    const oldAvail = p.availability;
-    const priceChanged =
-      price != null && oldPrice != null && Math.abs(price - oldPrice) > 0.001;
-    const availChanged = availability !== oldAvail;
-
-    // Each product's snapshots + update are atomic: it fully applies or rolls
-    // back, so a mid-run failure can't leave the product out of sync or drop
-    // the other products' notifications.
-    try {
-      await prisma.$transaction([
-        // Save every check as snapshots (spec: every check is recorded).
-        prisma.priceSnapshot.create({
-          data: {
-            productId: p.id,
-            price: price ?? oldPrice ?? 0,
-            currency: p.currency,
-            source: "scheduled",
-            checkedAt: now,
-          },
-        }),
-        prisma.stockSnapshot.create({
-          data: {
-            productId: p.id,
-            availability,
-            source: "scheduled",
-            checkedAt: now,
-          },
-        }),
-        prisma.product.update({
-          where: { id: p.id },
-          data: {
-            previousPrice: priceChanged ? oldPrice : p.previousPrice,
-            currentPrice: price ?? oldPrice,
-            lowestPrice:
-              price != null
-                ? Math.min(p.lowestPrice ?? price, price)
-                : p.lowestPrice,
-            highestPrice:
-              price != null
-                ? Math.max(p.highestPrice ?? price, price)
-                : p.highestPrice,
-            availability,
-            lastCheckedAt: now,
-          },
-        }),
-      ]);
-    } catch (e) {
-      console.error(`[job] check failed for ${p.id}:`, e);
-      continue; // skip counts + notifications for this product
-    }
-
-    if (priceChanged) priceChanges++;
-    if (availChanged) stockChanges++;
-    drafts.push(
-      ...buildNotifications(
-        p,
-        oldPrice,
-        price,
-        oldAvail,
-        availability,
-        p.alerts[0] ?? null,
-      ),
+  const writes: Prisma.PrismaPromise<unknown>[] = [];
+  // Only record a price snapshot when we have a REAL price (no fabrication).
+  if (price != null) {
+    writes.push(
+      prisma.priceSnapshot.create({
+        data: {
+          productId: p.id,
+          price,
+          currency: p.currency,
+          source: "scheduled",
+          checkedAt: now,
+        },
+      }),
     );
   }
+  // Stock snapshot: every check is recorded (availability is always known-ish).
+  writes.push(
+    prisma.stockSnapshot.create({
+      data: {
+        productId: p.id,
+        availability,
+        source: "scheduled",
+        checkedAt: now,
+      },
+    }),
+  );
+  writes.push(
+    prisma.product.update({
+      where: { id: p.id },
+      data: {
+        previousPrice: priceChanged ? oldPrice : p.previousPrice,
+        currentPrice: price ?? oldPrice,
+        lowestPrice:
+          price != null ? Math.min(p.lowestPrice ?? price, price) : p.lowestPrice,
+        highestPrice:
+          price != null ? Math.max(p.highestPrice ?? price, price) : p.highestPrice,
+        availability,
+        lastCheckedAt: now,
+      },
+    }),
+  );
 
-  // Flush notifications for the products that did commit (best-effort).
+  await prisma.$transaction(writes);
+
+  const drafts = buildNotifications(
+    p,
+    oldPrice,
+    price,
+    oldAvail,
+    availability,
+    p.alerts[0] ?? null,
+  );
   if (drafts.length) {
     try {
       await prisma.notification.createMany({ data: drafts });
     } catch (e) {
-      console.error("[job] notification flush failed:", e);
+      console.error(`[job] notification flush failed for ${p.id}:`, e);
+    }
+  }
+
+  return {
+    priceChanged,
+    stockChanged: availChanged,
+    notifications: drafts.length,
+  };
+}
+
+/**
+ * Manual path ("Run check now"): scrape each tracked product inline via
+ * fetchLivePrice (real data; dev-simulated only when no SCRAPERAPI_KEY in
+ * non-prod) and apply via applyPriceCheck. Bounded so it can't run unbounded.
+ */
+export async function runPriceStockCheck(limit = 40): Promise<CheckSummary> {
+  const products = await prisma.product.findMany({
+    where: {
+      userId: USER_ID,
+      isArchived: false,
+      isPurchased: false,
+      releasedAt: null,
+    },
+    orderBy: [{ lastCheckedAt: { sort: "asc", nulls: "first" } }],
+    take: limit,
+    select: { id: true, originalUrl: true, storeDomain: true },
+  });
+
+  let priceChanges = 0;
+  let stockChanges = 0;
+  let notifications = 0;
+
+  for (const p of products) {
+    try {
+      const next = await fetchLivePrice({
+        originalUrl: p.originalUrl,
+        storeDomain: p.storeDomain,
+      });
+      const r = await applyPriceCheck(p.id, next);
+      if (r.priceChanged) priceChanges++;
+      if (r.stockChanged) stockChanges++;
+      notifications += r.notifications;
+    } catch (e) {
+      console.error(`[job] check failed for ${p.id}:`, e);
+      continue;
     }
   }
 
@@ -243,7 +260,7 @@ export async function runPriceStockCheck(): Promise<CheckSummary> {
     checked: products.length,
     priceChanges,
     stockChanges,
-    notifications: drafts.length,
+    notifications,
   };
 }
 

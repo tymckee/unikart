@@ -52,13 +52,22 @@ async function normalizeForSave(
   }
 }
 
-/** Manually run the price/stock check (the "Run check now" button). */
+/**
+ * Manually run the price/stock check (the "Run check now" button). Always real
+ * data: it scrapes each product via fetchLivePrice (inside runPriceStockCheck)
+ * and applies the result with applyPriceCheck.
+ *
+ * In production we keep the batch SMALL (a few oldest-checked products) so the
+ * scrape stays under Netlify's 10s function cap — the full sweep runs on the
+ * 6-hour scheduled function. Locally there's no timeout, so we check more.
+ */
 export async function runPriceCheckNow(): Promise<
   ActionResult<{ priceChanges: number; stockChanges: number; notifications: number }>
 > {
   if (!hasDatabase()) return NO_DB;
   try {
-    const s = await runPriceStockCheck();
+    const limit = process.env.NODE_ENV === "production" ? 3 : 40;
+    const s = await runPriceStockCheck(limit);
     revalidateAll();
     return {
       ok: true,
