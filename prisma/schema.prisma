@@ -1,11 +1,9 @@
 // UniKart — Prisma schema
-// Local dev uses SQLite (minimal friction). To move to Postgres later:
-//   1. change provider to "postgresql"
-//   2. point DATABASE_URL at the Postgres instance
-//   3. (optional) convert the String status/type columns to native enums
-// Enum-like fields are String because SQLite has no enum type; the TS union
-// types in src/lib/types.ts remain the source of truth and are cast in the
-// data-access layer.
+// Postgres (Neon) for local dev + production. DATABASE_URL = pooled (-pooler)
+// connection for runtime queries; DIRECT_URL = direct connection for migrations.
+// Enum-like fields are kept as String (carried over from the original SQLite
+// design); the TS union types in src/lib/types.ts remain the source of truth and
+// are cast in the data-access layer. They could become native PG enums later.
 
 generator client {
   provider      = "prisma-client-js"
@@ -18,8 +16,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // pooled (-pooler) — runtime queries
+  directUrl = env("DIRECT_URL")   // direct (no -pooler) — migrations
 }
 
 model User {
