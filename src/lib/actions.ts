@@ -207,7 +207,14 @@ export async function saveProduct(
     }
 
     // Kick off background enrichment (slow scrape → real price/image/specs).
-    await triggerEnrichment(product.id);
+    await triggerEnrichment({
+      productId: product.id,
+      originalUrl: input.originalUrl,
+      title,
+      brand: input.brand,
+      category: input.category,
+      storeName: input.storeName,
+    });
 
     revalidateAll();
     return { ok: true, data: { id: product.id } };
@@ -223,21 +230,30 @@ export async function saveProduct(
  * over the 10s request limit) and return immediately. Locally (or with no site
  * URL) there's no timeout, so we just run it inline.
  */
-async function triggerEnrichment(productId: string): Promise<void> {
+interface EnrichTrigger {
+  productId: string;
+  originalUrl: string;
+  title: string;
+  brand?: string | null;
+  category?: string | null;
+  storeName?: string | null;
+}
+
+async function triggerEnrichment(input: EnrichTrigger): Promise<void> {
   const base = process.env.URL || process.env.DEPLOY_PRIME_URL;
   if (process.env.NODE_ENV === "production" && base) {
     try {
       await fetch(`${base}/.netlify/functions/enrich-product-background`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ productId, secret: process.env.CRON_SECRET }),
+        body: JSON.stringify({ ...input, secret: process.env.CRON_SECRET }),
       });
     } catch (e) {
       console.error("[action] enrich trigger:", e);
     }
   } else {
     try {
-      await enrichProduct(productId);
+      await enrichProduct(input.productId);
     } catch (e) {
       console.error("[action] enrich inline:", e);
     }
