@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { hasDatabase, prisma } from "./db";
 import { parseProduct } from "./parser";
+import { enrichProduct } from "./enrich";
 import { getCutout } from "./cutout";
 import { summarizeProduct, type ProductGist } from "./ai/gist";
 import { runPriceStockCheck } from "./jobs/price-stock";
@@ -205,11 +206,41 @@ export async function saveProduct(
       }
     }
 
+    // Kick off background enrichment (slow scrape → real price/image/specs).
+    await triggerEnrichment(product.id);
+
     revalidateAll();
     return { ok: true, data: { id: product.id } };
   } catch (e) {
     console.error("[action] saveProduct:", e);
     return { ok: false, reason: "error" };
+  }
+}
+
+/**
+ * Fill in real price/image/specs after save. In production we hand off to a
+ * Netlify Background Function (15-min budget — the scrape can take 5–16s, well
+ * over the 10s request limit) and return immediately. Locally (or with no site
+ * URL) there's no timeout, so we just run it inline.
+ */
+async function triggerEnrichment(productId: string): Promise<void> {
+  const base = process.env.URL || process.env.DEPLOY_PRIME_URL;
+  if (process.env.NODE_ENV === "production" && base) {
+    try {
+      await fetch(`${base}/.netlify/functions/enrich-product-background`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ productId, secret: process.env.CRON_SECRET }),
+      });
+    } catch (e) {
+      console.error("[action] enrich trigger:", e);
+    }
+  } else {
+    try {
+      await enrichProduct(productId);
+    } catch (e) {
+      console.error("[action] enrich inline:", e);
+    }
   }
 }
 

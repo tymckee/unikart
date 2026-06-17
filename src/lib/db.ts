@@ -1,4 +1,6 @@
-import { PrismaClient } from "@/generated/prisma";
+// Relative (not the "@/" alias) so this chain also bundles cleanly inside the
+// standalone Netlify Background Function, which doesn't resolve tsconfig paths.
+import { PrismaClient } from "../generated/prisma";
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;

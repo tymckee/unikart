@@ -1,5 +1,4 @@
 import { extractProduct } from "./extract";
-import { scrapeStructured } from "./scrape";
 import { simulateParse, type ParsePreview } from "../parse-preview";
 
 const USER_AGENT =
@@ -144,26 +143,14 @@ export async function parseProduct(rawUrl: string): Promise<ParsePreview> {
   const url = normalize(rawUrl);
   if (!isSafePublicUrl(url)) return simulateParse(rawUrl);
 
-  // 1. Amazon → ScraperAPI structured endpoint (fast, free, clean JSON incl.
-  //    real price/image). No-op without SCRAPERAPI_KEY.
-  const structured = await scrapeStructured(url);
-  if (structured) return structured;
-
-  // Amazon hard-blocks the polite bot, so if the structured call didn't return
-  // (slow → aborted, or failed), skip the doomed direct fetch and degrade to the
-  // URL fallback. Keeps the request well under the function timeout.
-  if (/(^|\.)amazon\./i.test(new URL(url).hostname)) return simulateParse(rawUrl);
-
-  // 2. Polite direct fetch (free, fast) — works for cooperative sites.
-  //    (ScraperAPI render is deliberately NOT in this synchronous path: it can
-  //    take 30–60s and fails on the free tier for Akamai-hard sites, which blew
-  //    the serverless function budget. Render belongs in a later background /
-  //    premium enrichment, not the live paste→preview round-trip.)
+  // Fast preview only: a polite direct fetch (cooperative sites) or the honest
+  // URL fallback. The slow but reliable ScraperAPI scrape runs in background
+  // enrichment after save (src/lib/enrich.ts), so this stays well under the
+  // request timeout and never makes the paste→preview spin for 10s+.
   const directHtml = await fetchHtml(url);
   const direct = directHtml ? safeExtract(directHtml, url) : null;
   if (isUsable(direct)) return direct;
 
-  // 3. Nothing usable → honest URL-only fallback (no fabricated price).
   return simulateParse(rawUrl);
 }
 

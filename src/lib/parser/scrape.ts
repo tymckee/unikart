@@ -118,14 +118,17 @@ function amazonToPreview(
  * Amazon → structured product JSON as a ready ParsePreview. Returns null when
  * no key, not an Amazon URL, no ASIN, or the request fails (caller falls back).
  */
-export async function scrapeStructured(url: string): Promise<ParsePreview | null> {
+export async function scrapeStructured(
+  url: string,
+  timeoutMs: number = SCRAPE_TIMEOUT_MS,
+): Promise<ParsePreview | null> {
   const key = process.env.SCRAPERAPI_KEY;
   if (!key) return null;
   const domain = prettyDomain(url);
   if (!/(^|\.)amazon\./i.test(domain)) return null;
 
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), SCRAPE_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     // Prefer the ASIN, but fall back to the full URL (ScraperAPI accepts either)
     // so odd URL forms (mobile, share links, extra path/query) still resolve.
