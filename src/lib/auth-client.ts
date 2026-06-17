@@ -1,6 +1,7 @@
 import { createAuthClient } from "better-auth/react";
 import { magicLinkClient } from "better-auth/client/plugins";
 import { passkeyClient } from "@better-auth/passkey/client";
+import { stripeClient } from "@better-auth/stripe/client";
 
 /**
  * Client-side Better Auth instance for use in React components
@@ -11,7 +12,12 @@ import { passkeyClient } from "@better-auth/passkey/client";
  * which is exactly what we want for both local dev and production.
  */
 export const authClient = createAuthClient({
-  plugins: [magicLinkClient(), passkeyClient()],
+  plugins: [
+    magicLinkClient(),
+    passkeyClient(),
+    // Enables authClient.subscription.upgrade / billingPortal / list / cancel.
+    stripeClient({ subscription: true }),
+  ],
 });
 
 export const {

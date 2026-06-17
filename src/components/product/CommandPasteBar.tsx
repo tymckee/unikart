@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Link2, Sparkles } from "lucide-react";
 import {
@@ -140,6 +141,8 @@ export function CommandPasteBar({
 
   const isHero = variant === "hero";
   const parsingDomain = value ? prettyDomain(value) : "the page";
+  // The free-plan cap was reached on save — offer a calm path to upgrade.
+  const limitHit = Boolean(error && error.includes("Free plan is limited"));
 
   return (
     <div className={cn("w-full", className)}>
@@ -317,7 +320,20 @@ export function CommandPasteBar({
               )}
             </Field>
 
-            {error && <p className="text-xs text-up">{error}</p>}
+            {error &&
+              (limitHit ? (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-accent-soft px-3 py-2 text-xs text-accent-ink">
+                  <span>{error}</span>
+                  <Link
+                    href="/settings"
+                    className="inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline"
+                  >
+                    <Sparkles size={13} /> Upgrade to Pro
+                  </Link>
+                </div>
+              ) : (
+                <p className="text-xs text-up">{error}</p>
+              ))}
 
             {/* Actions */}
             <div className="flex gap-3 pt-1">

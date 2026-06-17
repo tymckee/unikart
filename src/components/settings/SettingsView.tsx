@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Check, Download, LogOut } from "lucide-react";
 import {
   getCollectionsWithCounts,
@@ -9,11 +10,11 @@ import {
 } from "@/lib/mock-data";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/Switch";
-import { Pill } from "@/components/ui/Pill";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useSignOut } from "@/components/auth/use-sign-out";
 import { SettingsSection, SettingsRow } from "./SettingsSection";
 import { AccountCard } from "./AccountCard";
+import { PlanBillingCard } from "./PlanBillingCard";
 import { PasskeysManager } from "./PasskeysManager";
 import { ChangePasswordCard } from "./ChangePasswordCard";
 import { SessionsManager } from "./SessionsManager";
@@ -33,6 +34,7 @@ export function SettingsView({
   initialUser: InitialUser | null;
 }) {
   const { signOut, pending: signingOut } = useSignOut();
+  const searchParams = useSearchParams();
   const [frequency, setFrequency] = useState("daily");
   const [watchOnSave, setWatchOnSave] = useState(true);
   const [quietHours, setQuietHours] = useState(true);
@@ -43,6 +45,19 @@ export function SettingsView({
     setNote(msg);
     setTimeout(() => setNote(null), 3500);
   };
+
+  // Returning from Stripe Checkout (?upgraded=1) → confirm warmly. The webhook
+  // flips User.plan to "pro"; useSession picks it up on the next refresh.
+  // Deferred to a timeout so we don't setState synchronously in the effect.
+  useEffect(() => {
+    if (searchParams.get("upgraded") !== "1") return;
+    window.history.replaceState(null, "", "/settings");
+    const t = setTimeout(
+      () => flash("Welcome to UniKart Pro — your trial is active."),
+      0,
+    );
+    return () => clearTimeout(t);
+  }, [searchParams]);
 
   const exportData = () => {
     const payload = {
@@ -97,35 +112,10 @@ export function SettingsView({
         <SessionsManager onNotify={flash} />
       </div>
 
-      {/* Plan */}
-      <SettingsSection
-        title="Plan"
-        description="Free covers the essentials. Pro unlocks automatic tracking and Signal."
-      >
-        <div className="grid gap-px bg-line sm:grid-cols-2">
-          <PlanCard
-            name="Free"
-            price="$0"
-            current={initialUser?.plan !== "pro"}
-            features={[
-              "Save unlimited products",
-              "Basic collections",
-              "Manual reminders",
-            ]}
-          />
-          <PlanCard
-            name="Pro"
-            price="$4/mo"
-            current={initialUser?.plan === "pro"}
-            features={[
-              "Automatic price & stock tracking",
-              "Unlimited alerts",
-              "Advanced price history",
-              "Signal buy/wait guidance",
-            ]}
-          />
-        </div>
-      </SettingsSection>
+      {/* Plan & billing */}
+      {initialUser && (
+        <PlanBillingCard initialUser={{ plan: initialUser.plan }} />
+      )}
 
       {/* Alerts / Notifications */}
       <SettingsSection title="Notifications">
@@ -215,38 +205,6 @@ export function SettingsView({
           {note}
         </div>
       )}
-    </div>
-  );
-}
-
-function PlanCard({
-  name,
-  price,
-  features,
-  current,
-}: {
-  name: string;
-  price: string;
-  features: string[];
-  current?: boolean;
-}) {
-  return (
-    <div className="bg-white p-5">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-ink">{name}</h3>
-        {current && <Pill tone="accent">Current</Pill>}
-      </div>
-      <p className="mt-1 text-2xl font-semibold tracking-tight text-ink">
-        {price}
-      </p>
-      <ul className="mt-4 space-y-2">
-        {features.map((f) => (
-          <li key={f} className="flex items-start gap-2 text-sm text-slate">
-            <Check size={15} className="mt-0.5 shrink-0 text-down" />
-            {f}
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

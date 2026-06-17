@@ -27,7 +27,9 @@ model User {
   email         String   @unique
   emailVerified Boolean  @default(false) // Better Auth: email ownership confirmed
   image         String?
-  plan          String   @default("free") // free | pro
+  plan          String   @default("free") // free | pro — app's gating source of truth, mirrored from Stripe
+  // Stripe customer id, set by the Better Auth Stripe plugin (createCustomerOnSignUp).
+  stripeCustomerId String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -38,9 +40,10 @@ model User {
   carts         UniversalCart[]
 
   // Better Auth relations
-  sessions Session[]
-  accounts Account[]
-  passkeys Passkey[]
+  sessions      Session[]
+  accounts      Account[]
+  passkeys      Passkey[]
+  subscriptions Subscription[]
 }
 
 model Collection {
@@ -283,6 +286,35 @@ model Verification {
   updatedAt  DateTime @updatedAt
 
   @@index([identifier])
+}
+
+// Subscription — managed by the Better Auth Stripe plugin (@better-auth/stripe).
+// Field names/types mirror the plugin's expected schema exactly so its Prisma
+// adapter can read/write these rows. `referenceId` is the owning User.id (the
+// plugin's default). No @@map, cuid() default — same convention as the rest.
+model Subscription {
+  id                   String    @id @default(cuid())
+  plan                 String
+  referenceId          String
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  status               String    @default("incomplete")
+  periodStart          DateTime?
+  periodEnd            DateTime?
+  cancelAtPeriodEnd    Boolean?  @default(false)
+  cancelAt             DateTime?
+  canceledAt           DateTime?
+  endedAt              DateTime?
+  seats                Int?
+  trialStart           DateTime?
+  trialEnd             DateTime?
+  billingInterval      String?
+  stripeScheduleId     String?
+
+  user User @relation(fields: [referenceId], references: [id], onDelete: Cascade)
+
+  @@index([referenceId])
+  @@index([stripeCustomerId])
 }
 
 model Passkey {

@@ -45,6 +45,31 @@ export async function getCurrentUserId(): Promise<string | null> {
   return user?.id ?? null;
 }
 
+/**
+ * Pro-gate guard. Resolves to the signed-in Pro user's id, or returns a typed
+ * error result (never throws) so server actions can `if (!("id" in gate))`
+ * short-circuit cleanly. Mirrors Stripe via the User.plan column (see auth.ts).
+ *
+ *   const gate = await requirePro();
+ *   if ("reason" in gate) return gate; // { ok:false, reason, message }
+ *   // ...gate.id is a Pro user
+ */
+export async function requirePro(): Promise<
+  | { id: string }
+  | { ok: false; reason: "unauthorized" | "upgrade-required"; message?: string }
+> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, reason: "unauthorized" };
+  if (user.plan !== "pro") {
+    return {
+      ok: false,
+      reason: "upgrade-required",
+      message: "This feature is part of UniKart Pro.",
+    };
+  }
+  return { id: user.id };
+}
+
 function toIso(value: Date | string | null | undefined): string {
   if (!value) return new Date(0).toISOString();
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();

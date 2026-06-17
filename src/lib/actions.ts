@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { hasDatabase, prisma } from "./db";
-import { getCurrentUserId } from "./auth-helpers";
+import { getCurrentUser, getCurrentUserId } from "./auth-helpers";
 import { parseProduct } from "./parser";
 import { enrichProduct } from "./enrich";
 import { getCutout } from "./cutout";
@@ -95,6 +95,15 @@ export type ActionResult<T = undefined> =
 const NO_DB = { ok: false, reason: "no-database" } as const;
 const NO_AUTH = { ok: false, reason: "unauthorized" } as const;
 
+/**
+ * Free plan cap: at most this many *active* saved items (not archived, not
+ * released). Pro is unlimited. This is the single product gate — see
+ * requirePro() in auth-helpers and the upgrade card in Settings. Kept internal
+ * (not exported) because this is a "use server" module where only async
+ * functions may be exported.
+ */
+const FREE_ACTIVE_PRODUCT_LIMIT = 15;
+
 function revalidateAll() {
   revalidatePath("/dashboard");
   revalidatePath("/collections");
@@ -144,8 +153,25 @@ export async function saveProduct(
     return { ok: false, reason: "error", message: "Title and URL are required." };
   }
   try {
-    const userId = await getCurrentUserId();
-    if (!userId) return NO_AUTH;
+    const user = await getCurrentUser();
+    if (!user) return NO_AUTH;
+    const userId = user.id;
+
+    // Free-plan cap: free users may track at most FREE_ACTIVE_PRODUCT_LIMIT
+    // active items (non-archived, non-released). Pro is unlimited.
+    if (user.plan !== "pro") {
+      const activeCount = await prisma.product.count({
+        where: { userId, isArchived: false, releasedAt: null },
+      });
+      if (activeCount >= FREE_ACTIVE_PRODUCT_LIMIT) {
+        return {
+          ok: false,
+          reason: "error",
+          message: `Free plan is limited to ${FREE_ACTIVE_PRODUCT_LIMIT} saved items — upgrade to Pro for unlimited.`,
+        };
+      }
+    }
+
     const currency = input.currency ?? "USD";
     const price = input.price ?? null;
     const { title, gistJson } = await normalizeForSave(input);
