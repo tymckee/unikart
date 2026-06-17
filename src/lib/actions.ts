@@ -11,9 +11,36 @@ import type { Availability, MetadataConfidence } from "./types";
 
 const USER_ID = "user_1";
 
-/** Read a product preview from a pasted URL (server-side fetch + parse). */
+/** Read a product preview from a pasted URL (server-side fetch + parse), then
+ * AI-clean the name so the save modal shows a tidy, human product name instead
+ * of the retailer's keyword-stuffed title. Uses scraped bullets/description
+ * when available; degrades to a heuristic when there's no ANTHROPIC_API_KEY. */
 export async function parseProductUrl(url: string): Promise<ParsePreview> {
-  return parseProduct(url);
+  const preview = await parseProduct(url);
+  try {
+    const pageText =
+      typeof preview.rawMetadata?.pageText === "string"
+        ? preview.rawMetadata.pageText
+        : null;
+    const gist = await summarizeProduct({
+      title: preview.title,
+      description: pageText || preview.description,
+      brand: preview.brand,
+      category: preview.category,
+      storeName: preview.storeName,
+    });
+    const cleanName = gist?.cleanName?.trim();
+    if (
+      cleanName &&
+      cleanName.length >= 3 &&
+      cleanName.toLowerCase() !== preview.title.toLowerCase()
+    ) {
+      return { ...preview, title: cleanName };
+    }
+  } catch (e) {
+    console.error("[action] parseProductUrl normalize:", e);
+  }
+  return preview;
 }
 
 /** Manually run the price/stock check (the "Run check now" button). */

@@ -10,6 +10,8 @@ import Anthropic from "@anthropic-ai/sdk";
 const MODEL = process.env.ANTHROPIC_GIST_MODEL ?? "claude-haiku-4-5";
 
 export interface ProductGist {
+  /** A concise, brand-first product name with SEO/marketing cruft stripped. */
+  cleanName?: string;
   summary: string[];
   specs: { label: string; value: string }[];
 }
@@ -26,6 +28,7 @@ const GIST_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
+    cleanName: { type: "string" },
     summary: { type: "array", items: { type: "string" } },
     specs: {
       type: "array",
@@ -37,11 +40,18 @@ const GIST_SCHEMA = {
       },
     },
   },
-  required: ["summary", "specs"],
+  required: ["cleanName", "summary", "specs"],
 } as const;
+
+/** Collapse whitespace and drop a trailing marketing tail after a separator. */
+function cleanProductName(raw: string): string {
+  const s = (raw || "").replace(/\s+/g, " ").trim();
+  return (s.split(/\s+[–—|]\s+/)[0]?.trim() || s).slice(0, 80);
+}
 
 function clampGist(g: ProductGist): ProductGist {
   return {
+    cleanName: g.cleanName ? String(g.cleanName).trim().slice(0, 80) : undefined,
     summary: (g.summary ?? [])
       .map((s) => String(s).trim())
       .filter(Boolean)
@@ -84,7 +94,7 @@ function heuristicGist(input: GistInput): ProductGist {
       }.`,
     );
   }
-  return clampGist({ summary, specs });
+  return clampGist({ cleanName: cleanProductName(input.title), summary, specs });
 }
 
 export async function summarizeProduct(
@@ -96,13 +106,13 @@ export async function summarizeProduct(
     const client = new Anthropic();
     const res = await client.messages.create({
       model: MODEL,
-      max_tokens: 700,
+      max_tokens: 800,
       system:
-        "You simplify noisy e-commerce product copy into a calm, scannable summary. Be strictly factual: only use details present in the input, never invent specs or marketing claims. Summary bullets are short, plain-language, and free of hype.",
+        "You normalize noisy e-commerce product copy into a calm, clean record: a concise brand-first product name, a scannable summary, and the key specs. Be strictly factual: only use details present in the input, never invent specs, names, or marketing claims. Strip hype, keyword-stuffing, and SEO cruft.",
       messages: [
         {
           role: "user",
-          content: `Product: ${input.title}\nBrand: ${input.brand ?? "unknown"}\nCategory: ${input.category ?? "unknown"}\n\nDescription:\n${(input.description ?? "").trim() || "(no description provided)"}\n\nReturn 3–5 short plain-language bullet points (the gist of what this is) and any key specs (label/value pairs like Material, Dimensions, Capacity, Weight) that appear in the text.`,
+          content: `Product: ${input.title}\nBrand: ${input.brand ?? "unknown"}\nCategory: ${input.category ?? "unknown"}\n\nDescription:\n${(input.description ?? "").trim() || "(no description provided)"}\n\nReturn:\n- cleanName: a concise, human, brand-first product name. Strip SEO keyword-stuffing, repeated specs, and marketing adjectives; fix brand casing (e.g. "ray ban" → "Ray-Ban"). Don't invent anything. Example: "Wyze Smart Scale Ultra BodyScan with Handle – Wi-Fi & Bluetooth Body Composition Scale for Weight, BMI, Body Fat" → "Wyze Smart Scale Ultra (BodyScan)".\n- summary: 3–5 short plain-language bullets (the gist of what this is), no hype.\n- specs: key label/value pairs (Material, Dimensions, Capacity, Weight, Battery, etc.) that appear in the text.`,
         },
       ],
       output_config: { format: { type: "json_schema", schema: GIST_SCHEMA } },
