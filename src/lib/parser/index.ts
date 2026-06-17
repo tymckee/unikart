@@ -133,20 +133,16 @@ export async function parseProduct(rawUrl: string): Promise<ParsePreview> {
 
   try {
     const result = extractProduct(html, url);
-    // Learned almost nothing? Prefer the URL heuristic, but keep anything real.
-    if (
-      result.confidence === "low" &&
-      !result.imageUrl &&
-      result.price == null
-    ) {
-      const fb = simulateParse(rawUrl);
-      return {
-        ...fb,
-        title: result.title || fb.title,
-        imageUrl: result.imageUrl ?? fb.imageUrl,
-      };
+    // Trust the page whenever it yielded a real product signal — a real title
+    // (even if sparse, e.g. Amazon serves bots only the <title>), a price, or
+    // an image. Only when the page gave us nothing usable do we fall back to
+    // the URL heuristic, so we never paper a real save over with a fabricated
+    // (heuristic) price.
+    const gotRealTitle = result.title !== `${result.storeName} product`;
+    if (gotRealTitle || result.price != null || result.imageUrl) {
+      return result;
     }
-    return result;
+    return simulateParse(rawUrl);
   } catch {
     return simulateParse(rawUrl);
   }

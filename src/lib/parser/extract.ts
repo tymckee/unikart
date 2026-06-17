@@ -40,11 +40,59 @@ function abs(u: string | undefined, base: string): string | null {
   }
 }
 
-function cleanTitle(t: string): string {
-  const trimmed = (t || "").trim();
-  // Drop a trailing " | Brand" / " – Brand" site suffix when present.
-  const head = trimmed.split(/\s+[|–—]\s+/)[0]?.trim();
-  return head || trimmed;
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** A title/description equal to the site or brand name carries no product info. */
+function isGeneric(
+  v: string | undefined,
+  storeName: string,
+  domain: string,
+): boolean {
+  if (!v) return true;
+  const s = v.trim().toLowerCase();
+  if (!s) return true;
+  const bare = (x: string) =>
+    x.toLowerCase().replace(/^www\./, "").replace(/\.[a-z.]+$/i, "");
+  return (
+    s === storeName.toLowerCase() ||
+    s === domain.toLowerCase() ||
+    s === domain.toLowerCase().replace(/^www\./, "") ||
+    s === bare(storeName) ||
+    s === bare(domain)
+  );
+}
+
+/** Generic share/logo/spacer images some sites return instead of a product shot. */
+function isPlaceholderImage(u: string | undefined): boolean {
+  if (!u) return false;
+  return /\/share-icons\/|previewdoh|sprite|transparent-pixel|grey-pixel|spacer\.gif|\/s\.gif/i.test(
+    u,
+  );
+}
+
+function cleanTitle(t: string, ctx?: { storeName?: string; domain?: string }): string {
+  let s = (t || "").trim();
+  if (!s) return s;
+  // Strip a leading site prefix like "Amazon.com: …" / "Etsy - …".
+  const prefixes = [
+    ctx?.storeName,
+    ctx?.domain,
+    ctx?.domain?.replace(/\.[a-z.]+$/i, ""),
+  ].filter((p): p is string => Boolean(p));
+  for (const p of prefixes) {
+    const re = new RegExp(`^${escapeRe(p)}(\\.[a-z]{2,})?\\s*[:|\\-–—]\\s*`, "i");
+    if (re.test(s)) {
+      s = s.replace(re, "").trim();
+      break;
+    }
+  }
+  // Drop a trailing site/category suffix: " | Brand", " – Brand", or Amazon's
+  // " : Category". The spaced " : " separator won't match product-name colons
+  // like "WH-1000XM5: Wireless" (no leading space).
+  const head = s.split(/\s+[|–—:]\s+/)[0]?.trim();
+  return head || s;
 }
 
 /* ---- JSON-LD ---- */
@@ -165,18 +213,23 @@ export function extractProduct(html: string, url: string): ParsePreview {
   const storeName = str(meta["og:site_name"]) || storeNameFromDomain(domain);
   const fallbackTitle = `${storeName} product`;
 
+  // Some sites (notably Amazon) serve crawlers a generic OG title/description
+  // equal to the site name — skip those and recover the real product name from
+  // the <title> tag.
+  const ok = (v: string | undefined) =>
+    v && !isGeneric(v, storeName, domain) ? v : undefined;
   const title =
     (product && str(product["name"])) ||
-    meta["og:title"] ||
-    meta["twitter:title"] ||
-    cleanTitle($("title").first().text()) ||
+    ok(str(meta["og:title"])) ||
+    ok(str(meta["twitter:title"])) ||
+    ok(cleanTitle($("title").first().text(), { storeName, domain })) ||
     fallbackTitle;
 
   const description =
     (product && str(product["description"])) ||
-    meta["og:description"] ||
-    meta["description"] ||
-    meta["twitter:description"] ||
+    ok(str(meta["og:description"])) ||
+    str(meta["description"]) ||
+    str(meta["twitter:description"]) ||
     `Saved from ${domain}.`;
 
   const imageRaw =
@@ -186,7 +239,7 @@ export function extractProduct(html: string, url: string): ParsePreview {
     meta["twitter:image"] ||
     meta["twitter:image:src"] ||
     undefined;
-  const imageUrl = abs(imageRaw, url);
+  const imageUrl = isPlaceholderImage(imageRaw) ? null : abs(imageRaw, url);
 
   const price =
     offer.price ??
@@ -259,7 +312,7 @@ export function extractProduct(html: string, url: string): ParsePreview {
       jsonld: product ?? undefined,
       og: pick(meta, /^og:|^product:/),
       twitter: pick(meta, /^twitter:/),
-      title: cleanTitle($("title").first().text()) || undefined,
+      title: cleanTitle($("title").first().text(), { storeName, domain }) || undefined,
     },
   };
 }
