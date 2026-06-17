@@ -18,20 +18,36 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL") // pooled (-pooler) — runtime queries
-  directUrl = env("DIRECT_URL")   // direct (no -pooler) — migrations
+  directUrl = env("DIRECT_URL") // direct (no -pooler) — migrations
 }
 
 model User {
-  id            String   @id @default(cuid())
-  name          String
-  email         String   @unique
-  emailVerified Boolean  @default(false) // Better Auth: email ownership confirmed
-  image         String?
-  plan          String   @default("free") // free | pro — app's gating source of truth, mirrored from Stripe
+  id                    String    @id @default(cuid())
+  name                  String
+  email                 String    @unique
+  emailVerified         Boolean   @default(false) // Better Auth: email ownership confirmed
+  image                 String?
+  plan                  String    @default("free") // free | pro — app's gating source of truth, mirrored from Stripe
   // Stripe customer id, set by the Better Auth Stripe plugin (createCustomerOnSignUp).
-  stripeCustomerId String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  stripeCustomerId      String?
+  // --- Ops Console fields ----------------------------------------------------
+  // Access role for the internal Ops Console. Defaults to CUSTOMER (no ops
+  // access). One of: OWNER | ADMIN | SUPPORT | FINANCE | READONLY | CUSTOMER.
+  // The TS union in src/lib/ops/permissions.ts is the source of truth.
+  role                  String    @default("CUSTOMER")
+  // Account lifecycle for support/admin: active | disabled. Disabled blocks the
+  // customer app at the (app) layout gate.
+  status                String    @default("active")
+  disabledAt            DateTime?
+  // Internal flags an admin can set (never billed, excluded from metrics).
+  isTestAccount         Boolean   @default(false)
+  isInternal            Boolean   @default(false)
+  // Best-effort last-seen timestamp, bumped by trackEvent / app activity.
+  lastActiveAt          DateTime?
+  // Onboarding completion (resettable by support).
+  onboardingCompletedAt DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   products      Product[]
   collections   Collection[]
@@ -44,6 +60,11 @@ model User {
   accounts      Account[]
   passkeys      Passkey[]
   subscriptions Subscription[]
+
+  @@index([role])
+  @@index([status])
+  @@index([createdAt])
+  @@index([lastActiveAt])
 }
 
 model Collection {
@@ -333,4 +354,253 @@ model Passkey {
 
   @@index([userId])
   @@index([credentialID])
+}
+
+// ============================================================
+// UniKart Ops Console — internal admin / analytics / ops models.
+//
+// Design notes:
+//  - Enum-like fields are kept as String to match the rest of the schema; the
+//    TS unions in src/lib/ops/types.ts are the source of truth.
+//  - Audit / analytics / usage rows intentionally have NO foreign key to User.
+//    They store plain string ids (adminUserId, userId, …) so they survive a
+//    user deletion (audit immutability + retained analytics). PII tied to a
+//    deleted user is scrubbed explicitly by the DataRequest deletion flow, not
+//    by a cascade. See docs/OPS_PRIVACY.md.
+//  - Every table is indexed for the admin queries that drive each Ops page.
+// ============================================================
+
+/// Immutable record of every sensitive admin mutation. Append-only; never
+/// edited or deleted through the UI (see docs/OPS_SECURITY.md).
+model AdminAuditLog {
+  id           String   @id @default(cuid())
+  adminUserId  String
+  adminEmail   String
+  role         String
+  action       String // e.g. "user.role.change", "feature_flag.toggle"
+  targetType   String // "user" | "product" | "feature_flag" | "system" | …
+  targetId     String?
+  targetUserId String?
+  reason       String?
+  beforeJson   String? // JSON snapshot before the change (sanitized)
+  afterJson    String? // JSON snapshot after the change (sanitized)
+  metadataJson String? // extra context (sanitized — never secrets/PII bodies)
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  @@index([adminUserId])
+  @@index([targetType, targetId])
+  @@index([targetUserId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+/// First-party, privacy-conscious product analytics. Minimal metadata; hashed
+/// IP only when needed. Replaces invasive third-party tracking.
+model AnalyticsEvent {
+  id           String   @id @default(cuid())
+  userId       String?
+  sessionId    String?
+  eventName    String
+  entityType   String?
+  entityId     String?
+  metadataJson String? // small, sanitized
+  source       String   @default("web") // web | extension | system | api
+  ipHash       String?
+  createdAt    DateTime @default(now())
+
+  @@index([eventName])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([entityType, entityId])
+}
+
+/// First-party API usage / request telemetry for the costs + usage dashboards.
+model APIUsageEvent {
+  id               String   @id @default(cuid())
+  userId           String?
+  route            String
+  method           String   @default("GET")
+  statusCode       Int      @default(200)
+  durationMs       Int?
+  requestId        String?
+  ipHash           String?
+  userAgent        String?
+  source           String   @default("internal") // internal | extension | provider | cron
+  provider         String? // anthropic | scraperapi | resend | stripe | neon | netlify
+  operation        String? // e.g. "gist", "scrape", "send_email"
+  quantity         Float?
+  unit             String? // tokens | requests | emails | gb …
+  estimatedCostUsd Float?
+  metadataJson     String? // sanitized — never request bodies with PII
+  createdAt        DateTime @default(now())
+
+  @@index([route])
+  @@index([provider])
+  @@index([userId])
+  @@index([statusCode])
+  @@index([createdAt])
+}
+
+/// Configurable cost ledger. Entries are estimates unless unitCostUsd is a
+/// confirmed provider rate (see SystemSetting cost config + docs/OPS_COSTS).
+model CostLedgerEntry {
+  id               String   @id @default(cuid())
+  provider         String // anthropic | scraperapi | resend | stripe | neon | netlify | other
+  category         String // hosting | database | storage | email | parser | price_check | stock_check | ai | image | stripe_fees | affiliate | other
+  service          String?
+  operation        String?
+  quantity         Float    @default(1)
+  unit             String   @default("request")
+  unitCostUsd      Float    @default(0)
+  estimatedCostUsd Float    @default(0)
+  isEstimate       Boolean  @default(true)
+  userId           String?
+  productId        String?
+  requestId        String?
+  metadataJson     String?
+  occurredAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  @@index([provider])
+  @@index([category])
+  @@index([occurredAt])
+  @@index([userId])
+}
+
+/// Observability for background jobs (price/stock checks, enrichment, etc.).
+model JobRun {
+  id             String    @id @default(cuid())
+  jobType        String // price_check | stock_check | parser | notification | cleanup | billing_sync | email
+  status         String    @default("queued") // queued | running | succeeded | failed | canceled
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  durationMs     Int?
+  itemsProcessed Int       @default(0)
+  itemsSucceeded Int       @default(0)
+  itemsFailed    Int       @default(0)
+  errorCode      String?
+  errorMessage   String?
+  metadataJson   String?
+  createdBy      String? // admin user id for manual runs; null for scheduled
+  createdAt      DateTime  @default(now())
+
+  @@index([jobType])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// One row per URL parse attempt — powers the Parser dashboard (success rates
+/// by domain, failure reasons, extraction-source distribution).
+model ParseAttempt {
+  id               String   @id @default(cuid())
+  productId        String?
+  userId           String?
+  url              String
+  domain           String
+  status           String // success | partial | failed
+  confidence       String? // high | medium | low
+  extractionMethod String? // jsonld | opengraph | twitter | ecommerce_meta | html_fallback | manual_fallback
+  durationMs       Int?
+  errorCode        String?
+  errorMessage     String? // sanitized
+  metadataJson     String? // sanitized sample of what was read
+  createdAt        DateTime @default(now())
+
+  @@index([domain])
+  @@index([status])
+  @@index([extractionMethod])
+  @@index([createdAt])
+}
+
+/// Lightweight support ticketing. A ticket may exist for a non-user (email only).
+model SupportTicket {
+  id           String    @id @default(cuid())
+  userId       String?
+  email        String
+  subject      String
+  status       String    @default("open") // open | pending | resolved | closed
+  priority     String    @default("normal") // low | normal | high | urgent
+  category     String    @default("other") // account | product_saving | parser_failure | price_tracking | stock_tracking | billing | privacy | bug | feedback | other
+  assignedToId String?
+  productId    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  closedAt     DateTime?
+
+  notes SupportNote[]
+
+  @@index([status])
+  @@index([priority])
+  @@index([userId])
+  @@index([assignedToId])
+  @@index([createdAt])
+}
+
+/// Notes on a ticket (or directly on a user). Internal by default.
+model SupportNote {
+  id          String   @id @default(cuid())
+  ticketId    String?
+  userId      String?
+  adminUserId String
+  body        String
+  visibility  String   @default("internal") // internal | customer
+  createdAt   DateTime @default(now())
+
+  ticket SupportTicket? @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+/// Feature flags with rollout controls. Toggled only by authorized roles; every
+/// change is audited.
+model FeatureFlag {
+  id             String   @id @default(cuid())
+  key            String   @unique
+  name           String
+  description    String   @default("")
+  enabled        Boolean  @default(false)
+  rolloutPercent Int      @default(0)
+  allowlistJson  String   @default("[]") // JSON array of emails / user ids
+  denylistJson   String   @default("[]")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([key])
+}
+
+/// Non-secret system configuration (cost rates, tracking cadences, support
+/// settings). Secrets live in env vars, never here. JSON value blob.
+model SystemSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  valueJson   String   @default("null")
+  category    String   @default("general") // general | costs | parser | tracking | notifications | support | retention
+  description String   @default("")
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+}
+
+/// Data export / deletion requests (privacy). Self-service or admin-queued.
+model DataRequest {
+  id            String    @id @default(cuid())
+  userId        String
+  type          String // export | delete
+  status        String    @default("pending") // pending | processing | completed | failed | canceled
+  requestedById String? // admin user id if queued by an admin; null if self
+  reason        String?
+  resultUrl     String?
+  createdAt     DateTime  @default(now())
+  completedAt   DateTime?
+
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
 }
