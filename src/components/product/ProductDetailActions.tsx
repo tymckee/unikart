@@ -9,7 +9,7 @@ import {
   ExternalLink,
   ShoppingBag,
 } from "lucide-react";
-import { formatPrice } from "@/lib/utils";
+import { formatPrice, toPositiveNumber } from "@/lib/utils";
 import type { ProductView } from "@/lib/types";
 import {
   addToCart,
@@ -50,7 +50,7 @@ export function ProductDetailActions({ product }: { product: ProductView }) {
     run(() =>
       setAlert(product.id, {
         enabled,
-        targetPrice: target ? Number(target) : null,
+        targetPrice: toPositiveNumber(target),
       }),
     );
 

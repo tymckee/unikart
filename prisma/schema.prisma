@@ -68,6 +68,7 @@ model Product {
   highestPrice       Float?
   availability       String    @default("unknown") // in_stock | low_stock | out_of_stock | preorder | unknown
   metadataConfidence String    @default("low") // high | medium | low
+  rawMetadata        String? // JSON blob of what the parser read
   notes              String?
   isArchived         Boolean   @default(false)
   isPurchased        Boolean   @default(false)

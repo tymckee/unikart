@@ -39,11 +39,11 @@ function previewToProductView(
     description: preview.description,
     originalUrl: preview.originalUrl,
     canonicalUrl: preview.canonicalUrl,
-    imageUrl: null,
+    imageUrl: preview.imageUrl ?? null,
     storeName: preview.storeName,
     storeDomain: preview.storeDomain,
-    brand: null,
-    sku: null,
+    brand: preview.brand ?? null,
+    sku: preview.sku ?? null,
     category: preview.category,
     currency: preview.currency,
     currentPrice: preview.price,
@@ -60,16 +60,19 @@ function previewToProductView(
     updatedAt: now,
     lastCheckedAt: now,
     collections: collection ? [collection] : [],
-    priceHistory: [
-      {
-        id: `${id}-snap-0`,
-        productId: id,
-        price: preview.price,
-        currency: preview.currency,
-        source: "parser",
-        checkedAt: now,
-      },
-    ],
+    priceHistory:
+      preview.price != null
+        ? [
+            {
+              id: `${id}-snap-0`,
+              productId: id,
+              price: preview.price,
+              currency: preview.currency,
+              source: "parser",
+              checkedAt: now,
+            },
+          ]
+        : [],
     alert:
       opts.watch || opts.targetPrice
         ? {

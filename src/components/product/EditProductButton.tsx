@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PencilLine } from "lucide-react";
 import { updateProduct } from "@/lib/actions";
+import { toPositiveNumber } from "@/lib/utils";
 import type { Availability, ProductView } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -59,7 +60,7 @@ export function EditProductButton({ product }: { product: ProductView }) {
         title: title.trim(),
         originalUrl: url.trim(),
         category: category === "Other" ? null : category,
-        currentPrice: price ? Number(price) : null,
+        currentPrice: toPositiveNumber(price),
         availability,
       });
       if (res.ok) {

@@ -97,6 +97,13 @@ export function svgRound(n: number): number {
   return Math.round(n * 1000) / 1000;
 }
 
+/** Parse a user-entered amount to a finite non-negative number, else null. */
+export function toPositiveNumber(value: string): number | null {
+  if (!value || !value.trim()) return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
 /** Basic URL validity check for the paste bar. */
 export function looksLikeUrl(value: string): boolean {
   const v = value.trim();

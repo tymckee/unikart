@@ -3,10 +3,16 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Link2, Sparkles } from "lucide-react";
-import { cn, formatPrice, looksLikeUrl, prettyDomain } from "@/lib/utils";
+import {
+  cn,
+  formatPrice,
+  looksLikeUrl,
+  prettyDomain,
+  toPositiveNumber,
+} from "@/lib/utils";
 import { simulateParse, type ParsePreview } from "@/lib/parse-preview";
 import { mockCollections } from "@/lib/mock-data";
-import { saveProduct } from "@/lib/actions";
+import { parseProductUrl, saveProduct } from "@/lib/actions";
 import { useHub } from "@/components/hub/HubProvider";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -55,7 +61,7 @@ export function CommandPasteBar({
     timers.current.push(t);
   };
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!looksLikeUrl(value)) {
       setError("That doesn't look like a product link yet.");
@@ -63,10 +69,14 @@ export function CommandPasteBar({
     }
     setError(null);
     setStatus("parsing");
-    later(() => {
+    try {
+      setPreview(await parseProductUrl(value));
+    } catch {
+      // Network/edge failure — fall back to the URL heuristic so the user can
+      // still review and save (and edit) the product.
       setPreview(simulateParse(value));
-      setStatus("idle");
-    }, 1500);
+    }
+    setStatus("idle");
   }
 
   function reset() {
@@ -84,7 +94,7 @@ export function CommandPasteBar({
     const opts = {
       collectionId,
       watch,
-      targetPrice: target ? Number(target) : null,
+      targetPrice: toPositiveNumber(target),
     };
     setStatus("saving");
 
@@ -93,13 +103,17 @@ export function CommandPasteBar({
       description: preview.description,
       originalUrl: preview.originalUrl,
       canonicalUrl: preview.canonicalUrl,
+      imageUrl: preview.imageUrl,
       storeName: preview.storeName,
       storeDomain: preview.storeDomain,
+      brand: preview.brand,
+      sku: preview.sku,
       category: preview.category,
       currency: preview.currency,
       price: preview.price,
       availability: preview.availability,
       confidence: preview.confidence,
+      rawMetadata: preview.rawMetadata,
       ...opts,
     });
 
@@ -227,6 +241,7 @@ export function CommandPasteBar({
             <div className="flex gap-4 rounded-2xl border border-line bg-white/60 p-3">
               <ProductTile
                 category={preview.category}
+                imageUrl={preview.imageUrl}
                 title={preview.title}
                 className="h-24 w-24 shrink-0 rounded-xl"
                 iconSize={32}
@@ -291,9 +306,11 @@ export function CommandPasteBar({
                       setTarget(e.target.value.replace(/[^0-9.]/g, ""))
                     }
                     inputMode="decimal"
-                    placeholder={`Optional · e.g. ${Math.floor(
-                      preview.price * 0.9,
-                    )}`}
+                    placeholder={
+                      preview.price
+                        ? `Optional · e.g. ${Math.floor(preview.price * 0.9)}`
+                        : "Optional target price"
+                    }
                     className="h-11 flex-1 bg-transparent text-sm text-ink placeholder:text-silver focus:outline-none"
                   />
                 </div>

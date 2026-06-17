@@ -2,9 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { hasDatabase, prisma } from "./db";
+import { parseProduct } from "./parser";
+import type { ParsePreview } from "./parse-preview";
 import type { Availability, MetadataConfidence } from "./types";
 
 const USER_ID = "user_1";
+
+/** Read a product preview from a pasted URL (server-side fetch + parse). */
+export async function parseProductUrl(url: string): Promise<ParsePreview> {
+  return parseProduct(url);
+}
 
 export type ActionResult<T = undefined> =
   | { ok: true; data?: T }
@@ -41,11 +48,13 @@ export interface SaveProductInput {
   storeName: string;
   storeDomain: string;
   brand?: string | null;
+  sku?: string | null;
   category?: string | null;
   currency?: string;
   price: number | null;
   availability?: Availability;
   confidence?: MetadataConfidence;
+  rawMetadata?: Record<string, unknown> | null;
   collectionId?: string | null;
   watch?: boolean;
   targetPrice?: number | null;
@@ -72,6 +81,7 @@ export async function saveProduct(
         storeName: input.storeName,
         storeDomain: input.storeDomain,
         brand: input.brand ?? null,
+        sku: input.sku ?? null,
         category: input.category ?? null,
         currency,
         currentPrice: price,
@@ -80,6 +90,9 @@ export async function saveProduct(
         highestPrice: price,
         availability: input.availability ?? "unknown",
         metadataConfidence: input.confidence ?? "low",
+        rawMetadata: input.rawMetadata
+          ? JSON.stringify(input.rawMetadata).slice(0, 16000)
+          : null,
         priceSnapshots:
           price != null
             ? { create: [{ price, currency, source: "parser" }] }

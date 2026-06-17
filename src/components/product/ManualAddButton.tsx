@@ -7,6 +7,7 @@ import {
   cn,
   prettyDomain,
   storeNameFromDomain,
+  toPositiveNumber,
 } from "@/lib/utils";
 import { saveProduct } from "@/lib/actions";
 import { mockCollections } from "@/lib/mock-data";
@@ -92,7 +93,7 @@ export function ManualAddButton({
     }
     const cleanUrl = url.trim() || "https://example.com";
     const storeDomain = prettyDomain(cleanUrl);
-    const priceNum = price ? Number(price) : null;
+    const priceNum = toPositiveNumber(price);
 
     startTransition(async () => {
       const res = await saveProduct({
@@ -116,15 +117,20 @@ export function ManualAddButton({
           {
             title: title.trim(),
             description: "Added manually.",
+            imageUrl: null,
             storeName: storeNameFromDomain(storeDomain),
             storeDomain,
             category: category === "Other" ? "Home" : category,
-            price: priceNum ?? 0,
+            brand: null,
+            sku: null,
+            price: priceNum,
             currency: "USD",
             availability,
             confidence: "high",
             originalUrl: cleanUrl,
             canonicalUrl: cleanUrl,
+            source: "fallback",
+            rawMetadata: { source: "manual" },
           },
           { collectionId, watch, targetPrice: null },
         );
