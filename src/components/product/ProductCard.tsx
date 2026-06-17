@@ -70,7 +70,7 @@ export function ProductCard({ product }: { product: ProductView }) {
               <div className="relative">
                 <ProductTile
                   category={product.category}
-                  imageUrl={product.imageUrl}
+                  imageUrl={product.cutoutUrl ?? product.imageUrl}
                   title={product.title}
                   storeName={product.storeName}
                   className="aspect-[4/3] w-full"

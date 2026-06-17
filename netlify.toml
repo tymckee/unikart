@@ -11,3 +11,9 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  # @imgly/background-removal-node (+ native onnxruntime, ~133MB) is an
+  # optionalDependency used only by the LOCAL-DEV cutout path. Skip optional
+  # deps in the production build — cutout.ts dynamic-imports it behind a
+  # try/catch and no-ops when absent. Keeps it installed locally (optional
+  # deps install by default) without bloating every Netlify build.
+  NPM_FLAGS = "--omit=optional"

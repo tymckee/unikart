@@ -94,7 +94,7 @@ export default async function ProductDetailPage({
           <div className="grid gap-5 sm:grid-cols-2">
             <ProductTile
               category={product.category}
-              imageUrl={product.imageUrl}
+              imageUrl={product.cutoutUrl ?? product.imageUrl}
               title={product.title}
               storeName={product.storeName}
               className="aspect-square w-full rounded-2xl"

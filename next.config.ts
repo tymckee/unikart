@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: import.meta.dirname,
   },
+  // Keep the heavy, native, local-only background-removal deps out of the
+  // bundle/trace (they only run in dev; the cutout code dynamically imports them).
+  serverExternalPackages: ["@imgly/background-removal-node", "onnxruntime-node"],
 };
 
 export default nextConfig;
