@@ -4,7 +4,10 @@
 # repo in your PERSONAL Netlify account.
 
 [build]
-  command = "npm run build"
+  # Apply pending Prisma migrations (over DIRECT_URL) before building. Safe and
+  # idempotent: `migrate deploy` only applies already-created migrations, never
+  # generates or resets. `prisma generate` runs separately in postinstall.
+  command = "prisma migrate deploy && npm run build"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
