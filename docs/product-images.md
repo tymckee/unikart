@@ -27,6 +27,46 @@ cutoutUrl ?? imageUrl ?? null
 - `cutoutUrl` — a **background-removed** version (see below). Preferred when set.
 - `null` — draw the branded gradient tile.
 
+## Retailer photo coverage (Phase 3)
+
+`imageUrl` is filled by the parser at save time and by background enrichment
+after. Three fetch strategies, cheapest/most-reliable first (see
+`src/lib/parser/scrape.ts`):
+
+1. **Structured endpoints** — `scrapeStructured` dispatches by domain to
+   ScraperAPI's per-retailer JSON APIs. **Amazon** (keyed by ASIN — also decoded
+   from `/sspa/click` sponsored-ad and `a.co` short links) and **Walmart** (keyed
+   by the `/ip/.../<id>` item id). These bypass every bot wall and return a clean
+   photo + price + stock. Bulletproof and IP-independent.
+2. **Direct fetch** — a polite `UniKartBot` GET + `extractProduct` (JSON-LD →
+   Open Graph → meta). Free. Works for cooperative sites that serve OG/JSON-LD to
+   crawlers. Coverage is **IP-dependent** (a retailer may serve our server's IP
+   but block another), so it's best-effort, not a guarantee.
+3. **Rendered fetch** — `scrapeRender` (ScraperAPI `render=true`). Catches
+   JS-rendered cooperative sites the direct fetch misses (eBay, Urban Outfitters).
+   A render is slow (30–60s), so enrichment passes a ~55s timeout — the old 8s cap
+   silently killed every render fallback.
+
+**The extractor is never the bottleneck** — whenever we obtain real HTML it finds
+the image. The limit is *getting past the bot wall*.
+
+### What works vs. what's blocked (measured against the top ~50 US retailers)
+
+| Bucket | Path | Retailers |
+|---|---|---|
+| **Reliable** | structured / render | Amazon, Walmart, eBay, Urban Outfitters |
+| **Likely** (cooperative OG, IP-dependent) | direct fetch | Apple, Target, Nike, Samsung, Dell, IKEA, Newegg, PetSmart, Williams-Sonoma, Ulta, Zappos, Abercrombie, American Eagle, Ace Hardware, Dyson, Glossier |
+| **Blocked** (hard Akamai / PerimeterX / DataDome) | needs residential proxies | Best Buy, Home Depot, Lowe's, Costco, Wayfair, Etsy, Macy's, Kohl's, Chewy, Nordstrom, Gap, B&H, GameStop, Microsoft, North Face, Bath & Body Works, Tractor Supply, QVC, Saks, Crate & Barrel, Sephora, Lululemon, Adidas, Anthropologie, Petco, AutoZone, LEGO, REI, Patagonia, HP, Staples |
+
+The **blocked** tier (~31 retailers) cannot be scraped on ScraperAPI's
+default/datacenter plan — their walls reject datacenter proxies (`HTTP 500
+"…may require adding premium=true"`). The premium/residential proxy pool is a
+**paid plan**. The code is wired for it: set `SCRAPERAPI_PREMIUM=ultra` and
+`scrapeRender` escalates to residential proxies on failure (one extra call, only
+when a plain render fails) — no code change needed after upgrading. Until then,
+these retailers degrade gracefully to the branded gradient tile (honest, on-brand:
+a blank/branded image beats a fabricated one).
+
 ## AI background removal (planned)
 
 Goal: when a product photo exists, produce a transparent-background **cutout** so
