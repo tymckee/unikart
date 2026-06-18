@@ -172,12 +172,12 @@ export function CheckoutAssistant({ initial }: { initial: Row[] }) {
                   <StepNumber done={st === "completed"} n={i + 2} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-canvas text-slate">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-canvas text-slate">
                           <Store size={16} />
                         </span>
-                        <div>
-                          <p className="text-sm font-semibold text-ink">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-ink">
                             {g.storeName}
                           </p>
                           <p className="text-xs text-slate">
@@ -200,7 +200,7 @@ export function CheckoutAssistant({ initial }: { initial: Row[] }) {
                     </div>
 
                     {/* item thumbnails */}
-                    <div className="mt-3 flex gap-2">
+                    <div className="mt-3 flex flex-wrap gap-2">
                       {g.rows.map(({ item, product }) => (
                         <ProductTile
                           key={item.id}

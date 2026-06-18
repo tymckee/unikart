@@ -92,7 +92,10 @@ export function AccountCard({
         </span>
         <div className="min-w-0 flex-1">
           {editing ? (
-            <form onSubmit={saveName} className="flex items-center gap-2">
+            <form
+              onSubmit={saveName}
+              className="flex flex-wrap items-center gap-2"
+            >
               <Input
                 value={draft}
                 onChange={(e) => {
@@ -101,7 +104,7 @@ export function AccountCard({
                 }}
                 aria-label="Display name"
                 autoComplete="name"
-                className="h-9"
+                className="h-9 flex-1"
                 autoFocus
               />
               <Button type="submit" size="sm" loading={savingName}>
@@ -124,19 +127,19 @@ export function AccountCard({
             <div className="flex items-center gap-2">
               <p className="truncate text-sm font-semibold text-ink">{name}</p>
               <Pill tone={plan === "pro" ? "ink" : "neutral"}>
-                {plan === "pro" ? "Pro" : "Free"}
+                {plan === "pro" ? "Coast" : "Free"}
               </Pill>
             </div>
           )}
           {!editing && (
             <div className="mt-0.5 flex items-center gap-1.5">
-              <p className="truncate text-xs text-slate">{email}</p>
+              <p className="min-w-0 truncate text-xs text-slate">{email}</p>
               {verified ? (
-                <span className="inline-flex items-center gap-1 text-xs text-down">
+                <span className="inline-flex shrink-0 items-center gap-1 text-xs text-down">
                   <BadgeCheck size={13} /> Verified
                 </span>
               ) : (
-                <span className="text-xs text-warn">Unverified</span>
+                <span className="shrink-0 text-xs text-warn">Unverified</span>
               )}
             </div>
           )}

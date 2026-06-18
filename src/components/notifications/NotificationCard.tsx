@@ -54,7 +54,9 @@ export function NotificationCard({ notification: n }: { notification: Notificati
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-3">
-          <p className="text-sm font-semibold leading-snug text-ink">{n.title}</p>
+          <p className="min-w-0 break-words text-sm font-semibold leading-snug text-ink">
+            {n.title}
+          </p>
           {!n.read && (
             <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
           )}

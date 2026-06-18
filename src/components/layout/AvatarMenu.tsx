@@ -50,7 +50,7 @@ export function AvatarMenu({
         aria-label="Account menu"
         aria-haspopup="menu"
         aria-expanded={open}
-        className="inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-ink text-sm font-semibold text-white transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-ink text-sm font-semibold text-white transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
         {image ? (
           // eslint-disable-next-line @next/next/no-img-element

@@ -96,8 +96,11 @@ export function ProductCard({ product }: { product: ProductView }) {
                   </span>
                 )}
 
-                {/* Quick actions — fade in on hover */}
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 p-3 opacity-0 transition-all duration-300 group-hover:pointer-events-auto group-hover:opacity-100">
+                {/* Quick actions — hover shortcuts on pointer devices. On
+                    touch (phone/tablet) the overlay is omitted entirely; the
+                    card taps through to the detail page, which has the same
+                    actions — keeps the mobile Hub calm and uncluttered. */}
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 hidden items-center justify-center gap-1.5 p-3 opacity-0 transition-all duration-300 [@media(hover:hover)]:flex group-hover:pointer-events-auto group-hover:opacity-100">
                   <QuickAction
                     label={watching ? "Watching" : "Watch"}
                     active={watching}
@@ -167,9 +170,12 @@ export function ProductCard({ product }: { product: ProductView }) {
                 </div>
 
                 <div className="flex items-center gap-2 text-xs text-slate">
-                  <span className="truncate">{product.storeName}</span>
-                  <span className="text-fog">·</span>
-                  <ConfidenceMeter confidence={product.metadataConfidence} />
+                  <span className="min-w-0 truncate">{product.storeName}</span>
+                  <span className="shrink-0 text-fog">·</span>
+                  <ConfidenceMeter
+                    className="shrink-0"
+                    confidence={product.metadataConfidence}
+                  />
                 </div>
 
                 {/* Price */}

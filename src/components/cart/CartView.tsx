@@ -111,17 +111,21 @@ export function CartView({ initial }: { initial: Row[] }) {
       <div className="space-y-4">
         {groups.map((g) => (
           <GlassCard key={g.domain} variant="solid" className="overflow-hidden">
-            <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
-              <div className="flex items-center gap-2.5">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-canvas text-slate">
+            <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+              <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-canvas text-slate">
                   <Store size={16} />
                 </span>
-                <div>
-                  <p className="text-sm font-semibold text-ink">{g.storeName}</p>
-                  <p className="text-xs text-slate">{prettyDomain(g.domain)}</p>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-ink">
+                    {g.storeName}
+                  </p>
+                  <p className="truncate text-xs text-slate">
+                    {prettyDomain(g.domain)}
+                  </p>
                 </div>
               </div>
-              <div className="text-right">
+              <div className="shrink-0 text-right">
                 <p className="text-sm font-semibold text-ink">
                   {formatPrice(g.subtotal, "USD")}
                 </p>

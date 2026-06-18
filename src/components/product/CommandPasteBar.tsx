@@ -195,11 +195,11 @@ export function CommandPasteBar({
             />
             <Button
               type="submit"
-              size={isHero ? "md" : "sm"}
+              size="md"
               className="shrink-0"
               disabled={!value}
             >
-              <span className={isHero ? "" : "hidden sm:inline"}>Save</span>
+              <span>Save</span>
               <ArrowRight size={isHero ? 18 : 16} />
             </Button>
           </div>
@@ -392,16 +392,6 @@ function Switch({ on }: { on: boolean }) {
           on ? "translate-x-4" : "translate-x-0.5",
         )}
       />
-    </span>
-  );
-}
-
-/** Decorative hint chip used near the hero paste bar. */
-export function PasteHint() {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white/60 px-3 py-1 text-xs text-slate">
-      <Sparkles size={13} className="text-accent" />
-      Paste from Amazon, Apple, Shopify stores & more
     </span>
   );
 }

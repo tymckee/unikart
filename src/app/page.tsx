@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { HubProvider } from "@/components/hub/HubProvider";
-import { CommandPasteBar, PasteHint } from "@/components/product/CommandPasteBar";
+import { CommandPasteBar } from "@/components/product/CommandPasteBar";
 import { ProductTile } from "@/components/product/ProductTile";
 import { StockBadge } from "@/components/product/StockBadge";
 import { PriceHistoryChart } from "@/components/product/PriceHistoryChart";
@@ -93,14 +93,13 @@ export default async function LandingPage() {
               <HubProvider>
                 <CommandPasteBar variant="hero" redirectAfterSave="/dashboard" />
               </HubProvider>
-              <div className="mt-5 flex items-center justify-center gap-3">
-                <Button href={startHref}>
+              <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                <Button href={startHref} className="w-full sm:w-auto">
                   Start your calm cart <ArrowRight size={16} />
                 </Button>
-                <Button href="/demo" variant="secondary">
+                <Button href="/demo" variant="secondary" className="w-full sm:w-auto">
                   Try the demo
                 </Button>
-                <PasteHint />
               </div>
             </div>
           </div>

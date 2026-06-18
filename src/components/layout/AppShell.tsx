@@ -130,7 +130,7 @@ export function AppShell({
               <Link
                 href="/settings"
                 aria-label="Settings"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-ink text-sm font-semibold text-white transition-transform hover:scale-105"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-ink text-sm font-semibold text-white transition-transform hover:scale-105"
               >
                 T
               </Link>
