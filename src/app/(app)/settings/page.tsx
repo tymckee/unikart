@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { SettingsView } from "@/components/settings/SettingsView";
 import { getBillingInfo, getCurrentUser } from "@/lib/auth-helpers";
+import { getNotificationPreferences } from "@/lib/data";
 import type { BillingInfo } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -28,6 +29,9 @@ export default async function SettingsPage() {
         cancelAtPeriodEnd: false,
       };
 
+  // Notification preferences (calm defaults when there's no row yet).
+  const notificationPrefs = await getNotificationPreferences();
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <PageHeader
@@ -47,6 +51,7 @@ export default async function SettingsPage() {
             : null
         }
         billing={billing}
+        notificationPrefs={notificationPrefs}
       />
     </div>
   );

@@ -53,6 +53,7 @@ model User {
   collections   Collection[]
   alerts        AlertRule[]
   notifications Notification[]
+  notificationPreferences NotificationPreferences?
   carts         UniversalCart[]
 
   // Better Auth relations
@@ -187,11 +188,41 @@ model Notification {
   title     String
   body      String
   read      Boolean  @default(false)
+  // When this notification was included in a sent email digest. Null = pending
+  // (not yet emailed). Independent of `read` (in-app bell): emailing a change
+  // does not mark it read. The digest job claims pending rows by setting this.
+  emailedAt DateTime?
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([emailedAt])
+}
+
+/// Per-user notification delivery preferences. One row per user (lazily created
+/// the first time a user saves their settings). Absent row ⇒ calm defaults
+/// (email on, daily digest at 08:00 local). Phase 0 covers email digests; the
+/// web-push / native-push and quiet-hours fields will be added alongside those
+/// channels. `timezone` is an IANA name, captured from the browser, used to
+/// resolve the local send hour/weekday for digests.
+model NotificationPreferences {
+  userId          String   @id
+  emailEnabled    Boolean  @default(true)
+  digestFrequency String   @default("daily") // daily | weekly
+  digestSendHour  Int      @default(8) // 0–23, local to `timezone`
+  digestWeekday   Int      @default(1) // 0=Sun … 6=Sat (weekly only)
+  timezone        String   @default("America/New_York") // IANA tz name
+  // When this user was last sent a digest. Drives once-per-period delivery: the
+  // job sends when the local send hour has been reached AND no digest has gone
+  // out yet this local day/week. This makes delivery idempotent (no double
+  // sends across the hourly drain loop) and DST-safe (an "at or after" check
+  // can't skip a send hour that DST removes from the clock).
+  lastDigestAt    DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model UniversalCart {

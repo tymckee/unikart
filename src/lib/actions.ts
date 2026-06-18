@@ -8,8 +8,13 @@ import { enrichProduct } from "./enrich";
 import { getCutout } from "./cutout";
 import { summarizeProduct, type ProductGist } from "./ai/gist";
 import { runPriceStockCheck } from "./jobs/price-stock";
+import { sanitizeNotificationPreferences } from "./notifications";
 import type { ParsePreview } from "./parse-preview";
-import type { Availability, MetadataConfidence } from "./types";
+import type {
+  Availability,
+  MetadataConfidence,
+  NotificationPreferences,
+} from "./types";
 
 /** Read a product preview from a pasted URL (server-side fetch + parse). Kept
  * fast — just the fetch/scrape — so the paste→preview round-trip stays well
@@ -723,6 +728,32 @@ export async function setProductCollections(
     return { ok: true };
   } catch (e) {
     console.error("[action] setProductCollections:", e);
+    return { ok: false, reason: "error" };
+  }
+}
+
+/**
+ * Persist the signed-in user's notification preferences (the settings card).
+ * Upserts the single NotificationPreferences row, sanitizing every field so an
+ * out-of-range or hostile value can't be stored. Scoped to the session user.
+ */
+export async function updateNotificationPreferences(
+  input: Partial<NotificationPreferences>,
+): Promise<ActionResult> {
+  if (!hasDatabase()) return NO_DB;
+  try {
+    const userId = await getCurrentUserId();
+    if (!userId) return NO_AUTH;
+    const prefs = sanitizeNotificationPreferences(input);
+    await prisma.notificationPreferences.upsert({
+      where: { userId },
+      create: { userId, ...prefs },
+      update: prefs,
+    });
+    revalidatePath("/settings");
+    return { ok: true };
+  } catch (e) {
+    console.error("[action] updateNotificationPreferences:", e);
     return { ok: false, reason: "error" };
   }
 }

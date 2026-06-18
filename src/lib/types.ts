@@ -167,6 +167,21 @@ export interface Notification {
   createdAt: string;
 }
 
+export type DigestFrequency = "daily" | "weekly";
+
+/**
+ * A user's notification delivery preferences (client-facing shape). Mirrors the
+ * NotificationPreferences row; defaults are applied in the data layer when no
+ * row exists yet, so this is always fully populated.
+ */
+export interface NotificationPreferences {
+  emailEnabled: boolean;
+  digestFrequency: DigestFrequency;
+  digestSendHour: number; // 0–23, local to `timezone`
+  digestWeekday: number; // 0=Sun … 6=Sat (weekly only)
+  timezone: string; // IANA tz name
+}
+
 export interface UniversalCart {
   id: string;
   userId: string;

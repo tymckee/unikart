@@ -9,13 +9,13 @@ import {
   mockNotifications,
 } from "@/lib/mock-data";
 import { authClient } from "@/lib/auth-client";
-import type { BillingInfo } from "@/lib/types";
+import type { BillingInfo, NotificationPreferences } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/Switch";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useSignOut } from "@/components/auth/use-sign-out";
 import { SettingsSection, SettingsRow } from "./SettingsSection";
 import { AccountCard } from "./AccountCard";
+import { NotificationsCard } from "./NotificationsCard";
 import { PlanBillingCard } from "./PlanBillingCard";
 import { ProWelcome } from "./ProWelcome";
 import { PasskeysManager } from "./PasskeysManager";
@@ -34,15 +34,14 @@ interface InitialUser {
 export function SettingsView({
   initialUser,
   billing,
+  notificationPrefs,
 }: {
   initialUser: InitialUser | null;
   billing: BillingInfo;
+  notificationPrefs: NotificationPreferences;
 }) {
   const { signOut, pending: signingOut } = useSignOut();
   const searchParams = useSearchParams();
-  const [frequency, setFrequency] = useState("daily");
-  const [watchOnSave, setWatchOnSave] = useState(true);
-  const [quietHours, setQuietHours] = useState(true);
   const [affiliate, setAffiliate] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [welcome, setWelcome] = useState(false);
@@ -124,37 +123,8 @@ export function SettingsView({
       {/* Plan & billing */}
       {initialUser && <PlanBillingCard billing={billing} />}
 
-      {/* Alerts / Notifications */}
-      <SettingsSection title="Notifications">
-        <SettingsRow
-          label="Alert frequency"
-          description="How often we check the things you're watching."
-          control={
-            <SegmentedControl
-              size="sm"
-              options={[
-                { value: "realtime", label: "Realtime" },
-                { value: "daily", label: "Daily" },
-                { value: "weekly", label: "Weekly" },
-              ]}
-              value={frequency}
-              onChange={setFrequency}
-            />
-          }
-        />
-        <SettingsRow
-          label="Watch new saves automatically"
-          description="Turn on price alerts the moment you save something."
-          control={
-            <Switch checked={watchOnSave} onCheckedChange={setWatchOnSave} />
-          }
-        />
-        <SettingsRow
-          label="Quiet hours"
-          description="Hold non-urgent alerts overnight."
-          control={<Switch checked={quietHours} onCheckedChange={setQuietHours} />}
-        />
-      </SettingsSection>
+      {/* Notifications — real, persisted email-digest preferences */}
+      <NotificationsCard initialPrefs={notificationPrefs} onNotify={flash} />
 
       {/* Privacy */}
       <SettingsSection

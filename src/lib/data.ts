@@ -1,6 +1,7 @@
 import type { Prisma } from "@/generated/prisma";
 import { hasDatabase, prisma } from "./db";
 import { getCurrentUserId } from "./auth-helpers";
+import { DEFAULT_NOTIFICATION_PREFERENCES } from "./notifications";
 import * as mock from "./mock-data";
 import type {
   AlertRule,
@@ -12,6 +13,7 @@ import type {
   Collection,
   MetadataConfidence,
   Notification,
+  NotificationPreferences,
   NotificationType,
   PriceSnapshot,
   ProductView,
@@ -325,6 +327,33 @@ export async function getUnreadCount(): Promise<number> {
   } catch (e) {
     console.error("[data] getUnreadCount fell back to mock:", e);
     return mock.getUnreadCount();
+  }
+}
+
+/**
+ * The signed-in user's notification preferences, with calm defaults applied
+ * when no row exists yet (so the settings form always has a complete shape to
+ * render). Returns defaults — never throws — when there's no DB or no session.
+ */
+export async function getNotificationPreferences(): Promise<NotificationPreferences> {
+  if (!hasDatabase()) return DEFAULT_NOTIFICATION_PREFERENCES;
+  try {
+    const userId = await getCurrentUserId();
+    if (!userId) return DEFAULT_NOTIFICATION_PREFERENCES;
+    const row = await prisma.notificationPreferences.findUnique({
+      where: { userId },
+    });
+    if (!row) return DEFAULT_NOTIFICATION_PREFERENCES;
+    return {
+      emailEnabled: row.emailEnabled,
+      digestFrequency: row.digestFrequency === "weekly" ? "weekly" : "daily",
+      digestSendHour: row.digestSendHour,
+      digestWeekday: row.digestWeekday,
+      timezone: row.timezone,
+    };
+  } catch (e) {
+    console.error("[data] getNotificationPreferences fell back to defaults:", e);
+    return DEFAULT_NOTIFICATION_PREFERENCES;
   }
 }
 
