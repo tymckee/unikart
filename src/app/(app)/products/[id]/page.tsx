@@ -23,6 +23,8 @@ import { ProductCollectionsCard } from "@/components/product/ProductCollectionsC
 import { ShareButton } from "@/components/product/ShareButton";
 import { EditProductButton } from "@/components/product/EditProductButton";
 import { ProductGistCard } from "@/components/product/ProductGistCard";
+import { DimensionsCard } from "@/components/product/DimensionsCard";
+import { deriveDimensions } from "@/lib/dimensions";
 import type { ProductGist } from "@/lib/ai/gist";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Pill } from "@/components/ui/Pill";
@@ -65,7 +67,6 @@ export default async function ProductDetailPage({
   if (!product) notFound();
 
   const collections = await getCollectionsWithCounts();
-  const now = Date.now();
   let initialGist: ProductGist | null = null;
   if (product.gist) {
     try {
@@ -74,6 +75,15 @@ export default async function ProductDetailPage({
       /* ignore malformed cache */
     }
   }
+  // Structured size for the to-scale diagram — parsed from the gist's specs and
+  // the description (no extra AI call), null when there's nothing honest to draw.
+  const dimensions = deriveDimensions({
+    title: product.title,
+    category: product.category,
+    brand: product.brand,
+    description: product.description,
+    specs: initialGist?.specs ?? null,
+  });
   const delta = priceDelta(product.currentPrice, product.previousPrice);
   const target = product.alert?.targetPrice ?? null;
   const brain = buyBrain(product, product.priceHistory, target);
@@ -162,7 +172,7 @@ export default async function ProductDetailPage({
                     you let it go
                   </span>
                 ) : (
-                  <span>Considering for {durationSince(product.createdAt, now)}</span>
+                  <span>Considering for {durationSince(product.createdAt)}</span>
                 )}
               </p>
 
@@ -202,6 +212,9 @@ export default async function ProductDetailPage({
           {/* The gist (AI) */}
           <ProductGistCard productId={product.id} initial={initialGist} />
 
+          {/* Dimensions — to-scale diagram, the visual sibling of the gist */}
+          <DimensionsCard model={dimensions} />
+
           {/* Availability + details */}
           <div className="grid gap-5 sm:grid-cols-2">
             <GlassCard variant="solid" className="p-5">
@@ -209,7 +222,7 @@ export default async function ProductDetailPage({
               <div className="flex items-center justify-between">
                 <StockBadge availability={product.availability} />
                 <span className="text-xs text-slate">
-                  Checked {timeAgo(product.lastCheckedAt ?? product.updatedAt, now)}
+                  Checked {timeAgo(product.lastCheckedAt ?? product.updatedAt)}
                 </span>
               </div>
               <p className="mt-3 text-sm text-slate">
@@ -229,7 +242,7 @@ export default async function ProductDetailPage({
                 <Detail label="Store" value={product.storeName} />
                 <Detail
                   label="Added"
-                  value={timeAgo(product.createdAt, now)}
+                  value={timeAgo(product.createdAt)}
                 />
               </dl>
             </GlassCard>

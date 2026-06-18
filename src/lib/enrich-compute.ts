@@ -7,6 +7,10 @@ import { summarizeProduct, type ProductGist } from "./ai/gist";
 // native client. The DB write lives in enrich.ts / the apply route instead.
 
 const ENRICH_SCRAPE_TIMEOUT_MS = 40_000;
+// A JS render is much slower than a structured API call; give it real headroom
+// (the background function has a 15-minute budget). Too short a cap was silently
+// killing every render fallback, leaving non-Amazon/Walmart items image-less.
+const ENRICH_RENDER_TIMEOUT_MS = 55_000;
 
 export interface EnrichmentFields {
   title?: string;
@@ -33,7 +37,7 @@ export async function computeEnrichment(
 ): Promise<EnrichmentFields> {
   let scraped = await scrapeStructured(input.originalUrl, ENRICH_SCRAPE_TIMEOUT_MS);
   if (!scraped) {
-    const html = await scrapeRender(input.originalUrl).catch(() => null);
+    const html = await scrapeRender(input.originalUrl, ENRICH_RENDER_TIMEOUT_MS).catch(() => null);
     if (html) {
       try {
         scraped = extractProduct(html, input.originalUrl);

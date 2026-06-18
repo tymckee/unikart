@@ -192,7 +192,7 @@ const seeds: Seed[] = [
     collections: ["col_work", "col_home"],
     url: "https://www.hermanmiller.com/products/seating/office-chairs/aeron-chairs/",
     description:
-      "Ergonomic office chair with PostureFit SL and 8Z Pellicle suspension. Size B, Graphite.",
+      'Ergonomic office chair with PostureFit SL and 8Z Pellicle suspension. Size B, Graphite. Dimensions: 27"W x 18.5"D x 41"H.',
   },
   {
     id: "p_switch2",
